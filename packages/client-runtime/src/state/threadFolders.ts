@@ -1,4 +1,6 @@
 import { Atom } from "effect/reactivity";
+import { mFallback, msg } from "gt-i18n";
+import type { MFunctionType } from "gt-i18n/types";
 import {
   MAX_THREAD_FOLDER_RULE_PATTERN_LENGTH,
   type EnvironmentId,
@@ -187,10 +189,23 @@ export function threadFolderCollectUpdate(
 }
 
 /** A Collect submenu label: "By branch", "By branch: main", or "By branch: main +2". */
-export function threadFolderCollectLabel(title: string, values: ReadonlyArray<string>): string {
+export function threadFolderCollectLabel(
+  title: string,
+  values: ReadonlyArray<string>,
+  resolve: MFunctionType = mFallback,
+): string {
   const [first] = values;
   if (first === undefined) return title;
-  return values.length === 1 ? `${title}: ${first}` : `${title}: ${first} +${values.length - 1}`;
+  return values.length === 1
+    ? resolve(msg("{title}: {value}", { title, value: first, $context: "Collect submenu label" }))
+    : resolve(
+        msg("{title}: {value} +{count}", {
+          title,
+          value: first,
+          count: values.length - 1,
+          $context: "Collect submenu label, with how many more values",
+        }),
+      );
 }
 
 /**

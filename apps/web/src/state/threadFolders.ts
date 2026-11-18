@@ -25,7 +25,9 @@ import {
   type ThreadId,
 } from "@t3tools/contracts";
 import { AsyncResult, Atom } from "effect/reactivity";
+import { msg } from "gt-react";
 
+import { m } from "../i18n/messages";
 import { stackedThreadToast, toastManager } from "../components/ui/toast";
 import { randomUUID } from "../lib/utils";
 import { appAtomRegistry } from "../rpc/atomRegistry";
@@ -114,20 +116,18 @@ export function readThreadFolder(ref: ScopedThreadRef): EnvironmentThreadFolder 
   });
 }
 
-const NEW_THREAD_FOLDER_NAME = "New folder";
-
 /** Runs one folder change and toasts on failure; resolves to the new folder list, or null. */
 export async function mutateThreadFolders(
   environmentId: EnvironmentId,
   mutation: ThreadFolderMutation,
-  failureTitle = "Could not update folder",
+  failureTitle = m(msg("Could not update folder")),
 ): Promise<ThreadFolderMutationResult | null> {
   if (!readEnvironmentScope(environmentId, AuthOrchestrationOperateScope)) {
     toastManager.add(
       stackedThreadToast({
         type: "error",
         title: failureTitle,
-        description: "This connection cannot change folders.",
+        description: m(msg("This connection cannot change folders.")),
       }),
     );
     return null;
@@ -165,11 +165,11 @@ export async function createThreadFolder(input: {
     {
       type: "folder.create",
       folderId,
-      name: input.name ?? NEW_THREAD_FOLDER_NAME,
+      name: input.name ?? m(msg("New folder", { $context: "default name of a new thread folder" })),
       ...(input.icon === undefined ? {} : { icon: input.icon }),
       ...(input.threadIds.length > 0 ? { threadIds: [...input.threadIds] } : {}),
     },
-    "Could not create folder",
+    m(msg("Could not create folder")),
   );
   return result === null ? null : folderId;
 }
@@ -182,7 +182,9 @@ export function moveThreadsToFolder(input: {
   return mutateThreadFolders(
     input.environmentId,
     { type: "folder.move", threadIds: [...input.threadIds], folderId: input.folderId },
-    input.folderId === null ? "Could not remove from folder" : "Could not move to folder",
+    input.folderId === null
+      ? m(msg("Could not remove from folder"))
+      : m(msg("Could not move to folder")),
   );
 }
 
@@ -218,7 +220,7 @@ export async function addRelatedThreads(folder: EnvironmentThreadFolder): Promis
     await mutateThreadFolders(
       folder.environmentId,
       { type: "folder.applyRule", folderId: folder.id },
-      "Could not add related threads",
+      m(msg("Could not add related threads")),
     );
   } finally {
     appAtomRegistry.set(

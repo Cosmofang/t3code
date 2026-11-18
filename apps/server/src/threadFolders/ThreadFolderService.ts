@@ -38,6 +38,7 @@ import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
+import { ensureThreadFolderSchema } from "./threadFolderSchema.ts";
 
 export class ThreadFolderService extends Context.Service<
   ThreadFolderService,
@@ -97,6 +98,7 @@ const folderError = (message: string, options?: { folderId?: ThreadFolderId; cau
 
 const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
+  yield* ensureThreadFolderSchema.pipe(Effect.orDie);
   const threads = yield* ProjectionStore.ProjectionStoreV2;
   const projects = yield* ProjectStore.ProjectStoreV2;
   const serverSettings = yield* ServerSettings.ServerSettingsService;

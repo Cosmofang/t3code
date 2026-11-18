@@ -1,6 +1,7 @@
 import type { ProjectIconOverride } from "@t3tools/contracts";
 import { SearchIcon } from "lucide-react";
 import { createElement, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { T, useGT, useMessages, Var } from "gt-react";
 import {
   filterProjectIconNames,
   firstEmoji,
@@ -126,6 +127,8 @@ function LucideIconPane({
   readonly draft: ProjectIconDraft;
   readonly onDraftChange: (draft: ProjectIconDraft) => void;
 }) {
+  const gt = useGT();
+  const m = useMessages();
   const [query, setQuery] = useState("");
   const gridRef = useRef<HTMLDivElement>(null);
   const searching = query.trim() !== "";
@@ -143,8 +146,8 @@ function LucideIconPane({
         <InputGroupInput
           type="search"
           value={query}
-          aria-label="Search icons"
-          placeholder="Search all icons"
+          aria-label={gt("Search icons")}
+          placeholder={gt("Search all icons")}
           autoComplete="off"
           onChange={(event) => setQuery(event.currentTarget.value)}
           onKeyDown={(event) => {
@@ -173,13 +176,15 @@ function LucideIconPane({
               />
             ) : (
               <p className="py-10 text-center text-sm text-muted-foreground">
-                No icons match “{query.trim()}”.
+                <T>
+                  No icons match “<Var>{query.trim()}</Var>”.
+                </T>
               </p>
             )
           ) : (
             PROJECT_ICON_CATEGORIES.map((category) => (
-              <section key={category.label} aria-label={category.label}>
-                <PickerSectionLabel>{category.label}</PickerSectionLabel>
+              <section key={category.label} aria-label={m(category.label)}>
+                <PickerSectionLabel>{m(category.label)}</PickerSectionLabel>
                 <IconGrid
                   names={category.icons}
                   selected={draft.iconName}
@@ -203,6 +208,8 @@ function EmojiPane({
   readonly draft: ProjectIconDraft;
   readonly onDraftChange: (draft: ProjectIconDraft) => void;
 }) {
+  const gt = useGT();
+  const m = useMessages();
   const [customEmoji, setCustomEmoji] = useState("");
   const customInvalid = customEmoji.trim() !== "" && firstEmoji(customEmoji) === null;
   const focusEmoji = PROJECT_EMOJI_CATEGORIES.some((category) =>
@@ -216,8 +223,8 @@ function EmojiPane({
       <ScrollArea scrollFade className="h-56">
         <div className="space-y-3 p-0.5" onKeyDown={moveGridFocus}>
           {PROJECT_EMOJI_CATEGORIES.map((category) => (
-            <section key={category.label} aria-label={category.label}>
-              <PickerSectionLabel>{category.label}</PickerSectionLabel>
+            <section key={category.label} aria-label={m(category.label)}>
+              <PickerSectionLabel>{m(category.label)}</PickerSectionLabel>
               <div className={GRID_CLASS_NAME}>
                 {category.emojis.map((option) => (
                   <button
@@ -225,7 +232,7 @@ function EmojiPane({
                     type="button"
                     data-grid-option
                     tabIndex={option.emoji === focusEmoji ? 0 : -1}
-                    aria-label={option.label}
+                    aria-label={m(option.label)}
                     aria-pressed={draft.emoji === option.emoji}
                     className={cn(
                       OPTION_CLASS_NAME,
@@ -243,13 +250,15 @@ function EmojiPane({
         </div>
       </ScrollArea>
       <div>
-        <PickerSectionLabel>Any other emoji</PickerSectionLabel>
+        <PickerSectionLabel>
+          <T>Any other emoji</T>
+        </PickerSectionLabel>
         <Input
           value={customEmoji}
-          aria-label="Custom emoji"
+          aria-label={gt("Custom emoji")}
           aria-invalid={customInvalid}
           aria-describedby={customInvalid ? "project-custom-emoji-error" : undefined}
-          placeholder="Paste or type an emoji"
+          placeholder={gt("Paste or type an emoji")}
           autoComplete="off"
           onChange={(event) => {
             const value = event.currentTarget.value;
@@ -260,7 +269,7 @@ function EmojiPane({
         />
         {customInvalid ? (
           <p id="project-custom-emoji-error" className="mt-1.5 text-xs text-destructive-foreground">
-            That is not an emoji.
+            <T>That is not an emoji.</T>
           </p>
         ) : null}
       </div>
@@ -279,7 +288,7 @@ function MonogramPane({
   return (
     <div className="space-y-1.5">
       <label htmlFor="project-monogram" className="text-xs font-medium text-muted-foreground">
-        Letters
+        <T>Letters</T>
       </label>
       <Input
         id="project-monogram"
@@ -294,7 +303,7 @@ function MonogramPane({
         id="project-monogram-hint"
         className={cn("text-xs", valid ? "text-muted-foreground" : "text-destructive-foreground")}
       >
-        One or two letters or numbers.
+        <T>One or two letters or numbers.</T>
       </p>
     </div>
   );
@@ -313,11 +322,13 @@ export function ProjectIconPicker({
   readonly onDraftChange: (draft: ProjectIconDraft) => void;
   readonly preview: ReactNode;
 }) {
+  const gt = useGT();
+  const m = useMessages();
   return (
     <div className="space-y-4">
       {preview}
       <ToggleGroup
-        aria-label="Icon type"
+        aria-label={gt("Icon type")}
         variant="segmented"
         className="w-full *:flex-1"
         value={[draft.mode]}
@@ -328,21 +339,29 @@ export function ProjectIconPicker({
           }
         }}
       >
-        <Toggle value="lucide">Icon</Toggle>
-        <Toggle value="emoji">Emoji</Toggle>
-        <Toggle value="monogram">Monogram</Toggle>
+        <Toggle value="lucide">
+          <T>Icon</T>
+        </Toggle>
+        <Toggle value="emoji">
+          <T>Emoji</T>
+        </Toggle>
+        <Toggle value="monogram">
+          <T>Monogram</T>
+        </Toggle>
       </ToggleGroup>
 
       {draft.mode !== "emoji" ? (
         <div>
-          <PickerSectionLabel>Color</PickerSectionLabel>
-          <div className="flex flex-wrap" role="radiogroup" aria-label="Icon color">
+          <PickerSectionLabel>
+            <T>Color</T>
+          </PickerSectionLabel>
+          <div className="flex flex-wrap" role="radiogroup" aria-label={gt("Icon color")}>
             {PROJECT_ICON_COLORS.map((option) => (
               <button
                 key={option.value}
                 type="button"
                 role="radio"
-                aria-label={option.label}
+                aria-label={m(option.label)}
                 aria-checked={draft.color === option.value}
                 className="flex size-6 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                 onClick={() => onDraftChange({ ...draft, color: option.value })}
@@ -390,11 +409,13 @@ function ProjectIconPreview({ draft, name }: { draft: ProjectIconDraft; name: st
       <div className="min-w-0">
         <div className="truncate text-sm font-medium">{name}</div>
         <div className="truncate text-xs text-muted-foreground">
-          {icon.kind === "lucide"
-            ? iconLabel(icon.name)
-            : icon.kind === "emoji"
-              ? "Emoji"
-              : "Monogram"}
+          {icon.kind === "lucide" ? (
+            iconLabel(icon.name)
+          ) : icon.kind === "emoji" ? (
+            <T>Emoji</T>
+          ) : (
+            <T>Monogram</T>
+          )}
         </div>
       </div>
     </div>
@@ -407,7 +428,7 @@ export function ProjectIconPickerDialog({
   open,
   onOpenChange,
   onSelect,
-  title = "Choose project icon",
+  title,
 }: {
   readonly current: ProjectIconOverride | null;
   readonly projectName: string;
@@ -441,7 +462,7 @@ function ProjectIconPickerBody({
 }: {
   readonly current: ProjectIconOverride | null;
   readonly projectName: string;
-  readonly title: string;
+  readonly title: string | undefined;
   readonly onClose: () => void;
   readonly onSelect: (icon: ProjectIconOverride) => void;
 }) {
@@ -456,8 +477,10 @@ function ProjectIconPickerBody({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>{title}</DialogTitle>
-        <DialogDescription>Pick an icon, an emoji, or a monogram.</DialogDescription>
+        <DialogTitle>{title ?? <T>Choose project icon</T>}</DialogTitle>
+        <DialogDescription>
+          <T>Pick an icon, an emoji, or a monogram.</T>
+        </DialogDescription>
       </DialogHeader>
       <DialogPanel>
         <ProjectIconPicker
@@ -468,10 +491,10 @@ function ProjectIconPickerBody({
       </DialogPanel>
       <DialogFooter>
         <Button variant="outline" onClick={onClose}>
-          Cancel
+          <T>Cancel</T>
         </Button>
         <Button onClick={save} disabled={!icon}>
-          Save icon
+          <T>Save icon</T>
         </Button>
       </DialogFooter>
     </>

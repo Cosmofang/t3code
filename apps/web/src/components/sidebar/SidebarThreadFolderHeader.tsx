@@ -15,6 +15,7 @@ import {
   PinIcon,
   Undo2Icon,
 } from "lucide-react";
+import { msg, T, useGT, useMessages } from "gt-react";
 import {
   memo,
   useRef,
@@ -25,6 +26,7 @@ import {
 } from "react";
 
 import { cn } from "~/lib/utils";
+import { m, type MessageResolver } from "../../i18n/messages";
 import { projectIconColorClassName, projectIconTintClassName } from "../../projectIconColors";
 import { useEnvironmentScope } from "../../state/session";
 import { requestThreadFolderRename, useThreadFolderRenameKey } from "../../state/threadFolders";
@@ -46,11 +48,16 @@ const FOLDER_TALLY_CLASS_NAME = {
 } as const;
 
 const FOLDER_TALLY_LABEL = {
-  attention: "need you",
-  failed: "failed",
-  unread: "done",
-  working: "working",
-  waiting: "waiting",
+  attention: (count: number) =>
+    msg("{count} need you", { count, $context: "threads in a folder that need the user" }),
+  failed: (count: number) =>
+    msg("{count} failed", { count, $context: "threads in a folder that failed" }),
+  unread: (count: number) =>
+    msg("{count} done", { count, $context: "threads in a folder that finished, unread" }),
+  working: (count: number) =>
+    msg("{count} working", { count, $context: "threads in a folder that are running" }),
+  waiting: (count: number) =>
+    msg("{count} waiting", { count, $context: "threads in a folder that are waiting" }),
 } as const;
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -75,13 +82,32 @@ export function threadFolderParkedLabel(
     readonly nextWakeAt: string | null;
   },
   timestampFormat: TimestampFormat,
+  resolve: MessageResolver = m,
 ): string {
   return [
-    ...(parked.snoozedCount > 0 ? [`${parked.snoozedCount} snoozed`] : []),
+    ...(parked.snoozedCount > 0
+      ? [
+          resolve(
+            msg("{count} snoozed", {
+              count: parked.snoozedCount,
+              $context: "snoozed threads in a folder",
+            }),
+          ),
+        ]
+      : []),
     ...(parked.snoozedCount > 0 && parked.nextWakeAt !== null
       ? [threadFolderWakeLabel(parked.nextWakeAt, timestampFormat)]
       : []),
-    ...(parked.settledCount > 0 ? [`${parked.settledCount} settled`] : []),
+    ...(parked.settledCount > 0
+      ? [
+          resolve(
+            msg("{count} settled", {
+              count: parked.settledCount,
+              $context: "settled threads in a folder",
+            }),
+          ),
+        ]
+      : []),
   ].join(" · ");
 }
 
@@ -122,16 +148,13 @@ function hasVisiblePullRequest(thread: EnvironmentThreadShell) {
   );
 }
 
-function plural(count: number, noun: string) {
-  return `${count} ${noun}${count === 1 ? "" : "s"}`;
-}
-
 // Mounted only while renaming, so each rename starts from the current name.
 function FolderRenameInput(props: {
   name: string;
   onCommit: (name: string) => void;
   onCancel: () => void;
 }) {
+  const gt = useGT();
   const [draft, setDraft] = useState(props.name);
   // Enter and Escape blur the input as it unmounts; that blur must not commit again.
   const settledRef = useRef(false);
@@ -154,7 +177,7 @@ function FolderRenameInput(props: {
       value={draft}
       dir="auto"
       maxLength={MAX_NAME_LENGTH}
-      aria-label="Folder name"
+      aria-label={gt("Folder name")}
       onChange={(event) => setDraft(event.target.value)}
       onFocus={(event) => event.currentTarget.select()}
       onKeyDown={handleKeyDown}
@@ -233,6 +256,8 @@ export const SidebarThreadFolderHeader = memo(function SidebarThreadFolderHeader
   onContextMenu: (folder: EnvironmentThreadFolder, position: { x: number; y: number }) => void;
 }) {
   const { folder, folderKey, collapsed, threads, hiddenThreads, onToggle } = props;
+  const gt = useGT();
+  const messages = useMessages();
   const canOperate = useEnvironmentScope(folder.environmentId, AuthOrchestrationOperateScope);
   const isRenaming = useThreadFolderRenameKey() === folderKey;
   const localLastVisitedAtById = useUiStateStore((state) => state.threadLastVisitedAtById);
@@ -258,11 +283,21 @@ export const SidebarThreadFolderHeader = memo(function SidebarThreadFolderHeader
       ? null
       : threadFolderWakeLabel(props.nextWakeAt, props.timestampFormat);
   const label = [
-    `${folder.name} folder${folder.pinnedAt != null ? ", pinned" : ""}`,
-    plural(threads.length, "thread"),
-    ...tally.map((entry) => `${entry.count} ${FOLDER_TALLY_LABEL[entry.status]}`),
-    ...(wakeLabel === null ? [] : [`wakes ${wakeLabel}`]),
-    ...(pullRequestCount > 0 ? [plural(pullRequestCount, "pull request")] : []),
+    folder.pinnedAt != null
+      ? gt("{name} folder, pinned", { name: folder.name })
+      : gt("{name} folder", { name: folder.name }),
+    gt("{count, plural, one {{count} thread} other {{count} threads}}", {
+      count: threads.length,
+    }),
+    ...tally.map((entry) => messages(FOLDER_TALLY_LABEL[entry.status](entry.count))),
+    ...(wakeLabel === null ? [] : [gt("wakes {time}", { time: wakeLabel })]),
+    ...(pullRequestCount > 0
+      ? [
+          gt("{count, plural, one {{count} pull request} other {{count} pull requests}}", {
+            count: pullRequestCount,
+          }),
+        ]
+      : []),
   ].join(", ");
   const showActions = !isRenaming && canOperate;
   // Hover swaps the numbers for the actions; an open snooze menu keeps them shown.
@@ -446,12 +481,12 @@ export const SidebarThreadFolderHeader = memo(function SidebarThreadFolderHeader
             onSnooze={(preset) => props.onSnooze(folder, preset)}
             timestampFormat={props.timestampFormat}
             environmentId={folder.environmentId}
-            label="Snooze folder"
+            label={gt("Snooze folder")}
             className={actionClassName}
           />
         ) : (
           <FolderActionButton
-            label="Wake folder"
+            label={gt("Wake folder")}
             className={actionClassName}
             onPress={() => props.onWake(folder)}
           >
@@ -460,7 +495,7 @@ export const SidebarThreadFolderHeader = memo(function SidebarThreadFolderHeader
         )}
         {!showActions || props.settleAction === null ? null : (
           <FolderActionButton
-            label={props.settleAction === "settle" ? "Settle folder" : "Un-settle folder"}
+            label={props.settleAction === "settle" ? gt("Settle folder") : gt("Un-settle folder")}
             className={actionClassName}
             onPress={() => props.onSettle(folder, props.settleAction!)}
           >
@@ -502,11 +537,11 @@ export const SidebarThreadFolderEmptyRow = memo(function SidebarThreadFolderEmpt
     >
       {props.folder.threadIds.length > 0 ? (
         <span className="flex h-[30px] items-center ps-9 text-xs text-sidebar-muted-foreground">
-          No threads in this view
+          <T>No threads in this view</T>
         </span>
       ) : (
         <span className="mx-(--sidebar-row-content-inset) mt-1 flex h-8 items-center justify-center rounded-md border border-dashed border-sidebar-foreground/18 text-xs text-sidebar-muted-foreground">
-          Drag threads here
+          <T>Drag threads here</T>
         </span>
       )}
     </li>

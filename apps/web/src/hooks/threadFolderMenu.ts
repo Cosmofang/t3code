@@ -9,7 +9,9 @@ import {
   ThreadFolderId,
   type ThreadId,
 } from "@t3tools/contracts";
+import { msg } from "gt-react";
 
+import { m, type MessageResolver } from "../i18n/messages";
 import {
   createThreadFolder,
   moveThreadsToFolder,
@@ -45,6 +47,7 @@ interface FolderMenuInput {
 
 export function moveToFolderMenuItem(
   input: FolderMenuInput & { readonly folders: ReadonlyArray<EnvironmentThreadFolder> },
+  resolve: MessageResolver = m,
 ): ContextMenuItem<ThreadFolderMenuId> {
   const folders = input.folders.filter((folder) => folder.environmentId === input.environmentId);
   const targets = new Set<string>(input.threadIds);
@@ -52,11 +55,11 @@ export function moveToFolderMenuItem(
   const disabled = !input.canOperate;
   return {
     id: "folder",
-    label: "Move to folder",
+    label: resolve(msg("Move to folder")),
     icon: "folder",
     disabled,
     children: [
-      { id: "folder:new", label: "New folder…", disabled },
+      { id: "folder:new", label: resolve(msg("New folder…")), disabled },
       ...folders.map((folder, index) => ({
         id: `${FOLDER_ID_PREFIX}${folder.id}` as const,
         label: folder.name,
@@ -70,7 +73,7 @@ export function moveToFolderMenuItem(
         ? [
             {
               id: "folder:remove" as const,
-              label: "Remove from folder",
+              label: resolve(msg("Remove from folder")),
               separatorBefore: true,
               disabled,
             },
@@ -82,20 +85,22 @@ export function moveToFolderMenuItem(
 
 export function buildMoveToFolderMenuItem(
   input: FolderMenuInput,
+  resolve: MessageResolver = m,
 ): ContextMenuItem<ThreadFolderMenuId> | null {
   if (!readEnvironmentSupportsThreadFolders(input.environmentId)) return null;
-  return moveToFolderMenuItem({ ...input, folders: readThreadFolders() });
+  return moveToFolderMenuItem({ ...input, folders: readThreadFolders() }, resolve);
 }
 
 export function buildMultiSelectFolderMenuItems(
   input: FolderMenuInput,
+  resolve: MessageResolver = m,
 ): ReadonlyArray<ContextMenuItem<ThreadFolderMenuId>> {
-  const move = buildMoveToFolderMenuItem(input);
+  const move = buildMoveToFolderMenuItem(input, resolve);
   if (move === null) return [];
   return [
     {
       id: "folder:new-from-selection",
-      label: `New folder from selection (${input.threadIds.length})`,
+      label: resolve(msg("New folder from selection ({count})", { count: input.threadIds.length })),
       icon: "folder",
       disabled: !input.canOperate,
     },
