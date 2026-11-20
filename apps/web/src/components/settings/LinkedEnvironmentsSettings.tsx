@@ -60,12 +60,10 @@ export function LinkedEnvironmentsSettings({
   environmentId,
   environmentLabel,
   isSearchTarget,
-  titleAction,
 }: {
   readonly environmentId: EnvironmentId;
   readonly environmentLabel: string | null;
   readonly isSearchTarget: boolean;
-  readonly titleAction?: ReactNode;
 }) {
   const searchableSetting = useSearchableSetting();
   const gt = useGT();
@@ -92,7 +90,6 @@ export function LinkedEnvironmentsSettings({
     <SettingsSection
       {...(isSearchTarget ? { id: search.id } : {})}
       title={environmentLabel === null ? search.title : `${search.title} · ${environmentLabel}`}
-      titleAction={titleAction}
       headerAction={canLink ? <LinkEnvironmentAction environmentId={environmentId} /> : null}
     >
       {links.error ? (
@@ -175,17 +172,58 @@ function LinkedEnvironmentRow({
   );
 }
 
-export function LinkEnvironmentAction({
-  environmentId,
-}: {
-  readonly environmentId: EnvironmentId;
-}) {
+function LinkEnvironmentAction({ environmentId }: { readonly environmentId: EnvironmentId }) {
   const gt = useGT();
   const [open, setOpen] = useState(false);
+  return (
+    <LinkEnvironmentDialog
+      environmentId={environmentId}
+      open={open}
+      onOpenChange={setOpen}
+      trigger={
+        <DialogTrigger
+          render={
+            <Button size="xs" variant="default">
+              <PlusIcon className="size-3" />
+              {gt("Link", { $context: "verb, links an environment" })}
+            </Button>
+          }
+        />
+      }
+    />
+  );
+}
+
+/** What the link dialog opens with when something other than its own button opened it. */
+export interface LinkEnvironmentPrefill {
+  /** The machine to link to, by environment id, or `ANOTHER_ADDRESS` with `address`. */
+  readonly choice: string | null;
+  readonly address?: string;
+}
+
+/**
+ * The one link flow. When this client is connected to the picked machine and may create pairing
+ * links there, it mints the code itself; otherwise it asks for one.
+ */
+export function LinkEnvironmentDialog({
+  environmentId,
+  open,
+  onOpenChange,
+  trigger = null,
+  prefill,
+}: {
+  readonly environmentId: EnvironmentId;
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+  readonly trigger?: ReactNode;
+  readonly prefill?: LinkEnvironmentPrefill;
+}) {
+  const gt = useGT();
+  const setOpen = onOpenChange;
   const machines = useLinkableMachines(environmentId, open);
   // Null until the user picks; with no other machines known, only an address is left.
-  const [choice, setChoice] = useState<string | null>(null);
-  const [address, setAddress] = useState("");
+  const [choice, setChoice] = useState<string | null>(prefill?.choice ?? null);
+  const [address, setAddress] = useState(prefill?.address ?? "");
   const [pairingCode, setPairingCode] = useState("");
   const [access, setAccess] = useState<AuthMcpClientAccess>("approval-required");
   const [busy, setBusy] = useState(false);
@@ -218,8 +256,8 @@ export function LinkEnvironmentAction({
   const handleOpenChange = (next: boolean) => {
     setOpen(next);
     if (!next) {
-      setChoice(null);
-      setAddress("");
+      setChoice(prefill?.choice ?? null);
+      setAddress(prefill?.address ?? "");
       setPairingCode("");
       setAccess("approval-required");
       setMintFailed(new Set());
@@ -281,14 +319,7 @@ export function LinkEnvironmentAction({
         handleOpenChange(next);
       }}
     >
-      <DialogTrigger
-        render={
-          <Button size="xs" variant="default">
-            <PlusIcon className="size-3" />
-            {gt("Link", { $context: "verb, links an environment" })}
-          </Button>
-        }
-      />
+      {trigger}
       <DialogPopup className="max-w-md">
         <DialogHeader>
           <DialogTitle>

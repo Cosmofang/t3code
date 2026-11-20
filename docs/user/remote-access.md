@@ -428,11 +428,15 @@ an address you trust: the code is sent there.
   removes it here.
 - Links last 30 days. Link again with a new pairing code to renew one.
 
-With several machines, switch the list to **Map** on web or desktop to see
-which machine links to which. It draws the links of the machines this app is
-connected to; a machine it is not connected to may hold links the map cannot
-show. A link reaches one machine and does not carry on through that machine's
-own links.
+On web and desktop, **Settings → Environments** opens as a map of your machines:
+this app, each environment with one line per route (the one in use is
+highlighted), and the machines an environment links to. Select a machine to
+manage it, or switch to **List** for the same controls as rows. To link from
+the map, drag the plus on an environment onto another machine, or press it and
+pick one. If this app is connected to both machines it needs no pairing code.
+The map draws the links of the machines this app is connected to; a machine it
+is not connected to may hold links the map cannot show. A link reaches one
+machine and does not carry on through that machine's own links.
 
 An agent can also hand a task to a linked machine with `delegate_task`: it runs
 there as an ordinary thread, in the project with the same repository (or the

@@ -85,7 +85,10 @@ export function CloudEnvironmentConnectRows({
   empty = null,
   selection,
   onDiscoveryReady,
+  only,
 }: {
+  /** Show this machine's row alone, for a view that picks one machine at a time. */
+  readonly only?: EnvironmentId;
   readonly primaryEnvironmentId: EnvironmentId | null;
   readonly savedEnvironments: ReadonlyArray<SavedCloudEnvironmentConnection>;
   readonly showSavedEnvironments?: boolean;
@@ -142,6 +145,8 @@ export function CloudEnvironmentConnectRows({
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- fetches relay discovery when its inputs change, unless hidden polling covers it, and reports readiness
   useEffect(() => {
     let active = true;
+    // A single row belongs to a view that already listed the machines; listing again empties it.
+    if (only !== undefined) return;
     if (onDiscoveryReady || !refreshWhileEmpty || document.visibilityState === "visible") {
       void refreshRelayEnvironments().then(() => {
         if (active) onDiscoveryReady?.();
@@ -150,7 +155,7 @@ export function CloudEnvironmentConnectRows({
     return () => {
       active = false;
     };
-  }, [refreshRelayEnvironments, refreshWhileEmpty, onDiscoveryReady]);
+  }, [refreshRelayEnvironments, refreshWhileEmpty, onDiscoveryReady, only]);
 
   const connectEnvironment = async (environment: RelayClientEnvironmentRecord) => {
     if (
@@ -208,6 +213,7 @@ export function CloudEnvironmentConnectRows({
 
   // Omit machines saved over other routes; onboarding selection must not add a T3 Connect route.
   const isVisibleEnvironment = (environmentId: EnvironmentId) =>
+    (only === undefined || environmentId === only) &&
     environmentId !== primaryEnvironmentId &&
     !desktopLocalIds.has(environmentId) &&
     (showSavedEnvironments || !savedById.has(environmentId)) &&
