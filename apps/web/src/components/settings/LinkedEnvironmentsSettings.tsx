@@ -19,6 +19,7 @@ import { T, useGT, useMessages, Var } from "gt-react";
 import { type ReactNode, useId, useRef, useState } from "react";
 
 import { requestConfirmDialog } from "~/confirmDialog";
+import { useEnvironment } from "~/state/environments";
 import { mintPairingCodeOn } from "~/state/peerPairingCode";
 import { peerLinkEnvironment, useLinkableMachines } from "~/state/peerLinks";
 import { useEnvironmentQuery } from "~/state/query";
@@ -220,6 +221,8 @@ export function LinkEnvironmentDialog({
 }) {
   const gt = useGT();
   const setOpen = onOpenChange;
+  // Named in the title: from the map, nothing else on screen says which machine is linking.
+  const source = useEnvironment(environmentId);
   const machines = useLinkableMachines(environmentId, open);
   // Null until the user picks; with no other machines known, only an address is left.
   const [choice, setChoice] = useState<string | null>(prefill?.choice ?? null);
@@ -323,7 +326,13 @@ export function LinkEnvironmentDialog({
       <DialogPopup className="max-w-md">
         <DialogHeader>
           <DialogTitle>
-            <T>Link an environment</T>
+            {source === null ? (
+              <T>Link an environment</T>
+            ) : machine === null ? (
+              gt("Link {label} to another machine", { label: source.label })
+            ) : (
+              gt("Link {source} to {target}", { source: source.label, target: machine.label })
+            )}
           </DialogTitle>
           <DialogDescription>
             <T>

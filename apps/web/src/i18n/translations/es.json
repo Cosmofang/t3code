@@ -8714,6 +8714,7 @@
   "6698127fcc912f23": "Vincula otra máquina que ejecute T3 Code, como un VPS, para que los agentes de aquí puedan iniciar y controlar hilos allí.",
   "e1789f863205ad5a": "No se pudo vincular el entorno",
   "40cde51afa218290": "{label} vinculado",
+  "64ac3d1579ca9f5b": "Vincular {source} con {target}",
   "fb71127e5746a6bc": "Desde Compartir y acceso allí, o t3 pair",
   "ad5ed0ce61b966eb": "¿Olvidar {label}? Los agentes de aquí dejarán de trabajar allí. Revoca \"T3 Code · …\" en Compartir y acceso de {label} para cerrar también la sesión allí.",
   "81c9796bf61b306a": "No se pudo olvidar el vínculo",

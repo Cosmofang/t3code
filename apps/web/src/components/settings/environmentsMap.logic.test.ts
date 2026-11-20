@@ -13,6 +13,7 @@ import {
   fleetNeighborhood,
   fleetShapeKey,
   fleetStacks,
+  fleetSummary,
   isRouteEdge,
   layoutFleetGraph,
   nextFleetNode,
@@ -299,6 +300,29 @@ describe("buildFleetGraph", () => {
   });
 });
 
+describe("fleetSummary", () => {
+  it("counts links only when every connected environment's list was read", () => {
+    const summary = (...environments: FleetEnvironmentInput[]) => fleetSummary(build(environments));
+    expect(summary(environment("a", [link("x")]), environment("b"))).toEqual({
+      machines: 3,
+      links: 1,
+      loading: false,
+    });
+    expect(summary(environment("a"), environment("b"))).toMatchObject({ links: 0 });
+    // One failed list among several leaves the total unknown, not zero.
+    expect(summary(environment("a"), environment("b", "error"))).toMatchObject({ links: null });
+    expect(summary(environment("a", "unknown"))).toMatchObject({ links: null });
+    expect(summary(environment("a"), environment("b", "loading"))).toMatchObject({
+      links: null,
+      loading: true,
+    });
+    // A machine that is not connected says nothing either way.
+    expect(
+      summary(environment("a", [link("x")]), environment("b", "unknown", { phase: "offline" })),
+    ).toMatchObject({ links: 1 });
+  });
+});
+
 describe("fleetStacks", () => {
   it("collapses many machines under one host and one access level, and nothing smaller", () => {
     const graph = build([
@@ -465,7 +489,7 @@ describe("layoutFleetGraph", () => {
     expect(lay(backward)).toEqual(lay(forward));
   });
 
-  it("badges only links between environments, on their own lane and clear of each other", () => {
+  it("names the access of links between environments on their own lane, clear of everything", () => {
     const graph = build([
       environment("a", [link("b"), link("c"), link("x")]),
       environment("b", [link("a"), link("x")]),
@@ -475,11 +499,6 @@ describe("layoutFleetGraph", () => {
     const geometry = (from: string, to: string) =>
       layout.links.get(`link:${node(from)}>${node(to)}`)!;
     expect(geometry("a", "x").badge).toBeNull();
-    // With no machine to the right, the badge is the map's right edge.
-    const pair = layoutFleetGraph(build([environment("a", [link("b")]), environment("b")]));
-    expect(pair.links.get(`link:${node("a")}>${node("b")}`)!.badge!.x + 17).toBeLessThanOrEqual(
-      pair.width,
-    );
     expect(geometry("b", "x").badge).toBeNull();
     const badges = [
       ["a", "b"],
@@ -489,15 +508,42 @@ describe("layoutFleetGraph", () => {
     ].map(([from, to]) => {
       const { badge, d } = geometry(from!, to!);
       // On the link's own vertical run, between the two machines it joins.
-      expect(samplePath(d).some((point) => Math.abs(point.x - badge!.x) < 0.01)).toBe(true);
+      const run = samplePath(d).filter(
+        (point) => point.y > badge!.y && point.y < badge!.y + badge!.height,
+      );
+      expect(run.length).toBeGreaterThan(0);
+      for (const point of run) {
+        expect(point.x).toBeGreaterThan(badge!.x);
+        expect(point.x).toBeLessThan(badge!.x + badge!.width);
+      }
       const ends = [layout.nodes.get(node(from!))!, layout.nodes.get(node(to!))!];
       expect(badge!.y).toBeGreaterThan(Math.min(...ends.map((rect) => rect.y)));
       expect(badge!.y).toBeLessThan(Math.max(...ends.map((rect) => rect.y + rect.height)));
+      expect(badge!.x).toBeGreaterThanOrEqual(0);
+      expect(badge!.x + badge!.width).toBeLessThanOrEqual(layout.width);
       return badge!;
     });
-    for (const [index, left] of badges.entries()) {
-      for (const right of badges.slice(index + 1)) {
-        expect(Math.abs(left.x - right.x) >= 34 || Math.abs(left.y - right.y) >= 24).toBe(true);
+    const boxes = [...badges, ...solidRects(layout).map((box) => box.rect)];
+    for (const [index, badge] of badges.entries()) {
+      for (const other of boxes) {
+        if (other !== badge && boxes.indexOf(other) > index) {
+          expect(overlaps(badge, other)).toBe(false);
+        }
+      }
+    }
+  });
+
+  it("runs links between environments left of them and links to other machines right", () => {
+    const graph = largeSetup();
+    const layout = layoutFleetGraph(graph, fleetStacks(graph, new Set()));
+    const card = layout.nodes.get(node("nucbox"))!;
+    for (const edge of graph.edges) {
+      const geometry = edge.kind === "link" ? layout.links.get(edge.id) : undefined;
+      if (geometry === undefined) continue;
+      const between = layout.nodes.get(edge.to)!.x === card.x;
+      for (const point of samplePath(geometry.d)) {
+        if (between) expect(point.x, edge.id).toBeLessThanOrEqual(card.x);
+        else expect(point.x, edge.id).toBeGreaterThanOrEqual(card.x + card.width);
       }
     }
   });

@@ -34,7 +34,7 @@ import { environmentCatalog } from "~/connection/catalog";
 import { isDesktopLocalConnectionTarget } from "~/connection/desktopLocal";
 import { cn } from "~/lib/utils";
 import { relayEnvironmentDiscovery } from "~/state/relay";
-import { useRelayEnvironmentDiscovery } from "~/state/environments";
+import { useRelayEnvironmentDiscovery, useRetainedRelayEnvironments } from "~/state/environments";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { ConnectionStatusDot } from "../ConnectionStatusDot";
 import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
@@ -104,6 +104,9 @@ export function CloudEnvironmentConnectRows({
   const gt = useGT();
   const m = useMessages();
   const environmentsState = useRelayEnvironmentDiscovery();
+  const retainedEnvironments = useRetainedRelayEnvironments();
+  // A single row is a machine the user picked: it stays through a refresh, as it does on the map.
+  const discovered = only === undefined ? environmentsState.environments : retainedEnvironments;
   const registerEnvironment = useAtomCommand(environmentCatalog.register, {
     reportFailure: false,
   });
@@ -218,8 +221,8 @@ export function CloudEnvironmentConnectRows({
     !desktopLocalIds.has(environmentId) &&
     (showSavedEnvironments || !savedById.has(environmentId)) &&
     !(selection && savedWithoutRelay.has(environmentId));
-  const visibleEnvironments = [...environmentsState.environments.values()].filter(
-    ({ environment }) => isVisibleEnvironment(environment.environmentId),
+  const visibleEnvironments = [...discovered.values()].filter(({ environment }) =>
+    isVisibleEnvironment(environment.environmentId),
   );
   const selectNewComputers = useEffectEvent(
     (environments: typeof environmentsState.environments) => {

@@ -10,6 +10,7 @@ import {
   linkableMachines,
   offersLinkedEnvironments,
 } from "@t3tools/client-runtime/link-request";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import type { PeerLinkHealth } from "@t3tools/client-runtime/state/peerLinks";
 import { AuthAccessWriteScope, type EnvironmentId } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
@@ -44,7 +45,12 @@ import { useLiveRefresh } from "~/hooks/useLiveRefresh";
 import { useNowMinute } from "~/hooks/useNowMinute";
 import { observeResize } from "~/lib/observeResize";
 import { cn } from "~/lib/utils";
-import { type EnvironmentPresentation, useEnvironments } from "~/state/environments";
+import {
+  type EnvironmentPresentation,
+  useEnvironments,
+  useRelayEnvironmentDiscovery,
+  useRetainedRelayEnvironments,
+} from "~/state/environments";
 import { environmentIdsKey } from "~/state/environmentAtomList";
 import { peerLinkEnvironment, peerLinkListsAtom, usePeerLinkHosts } from "~/state/peerLinks";
 import { formatEnvironmentQueryError } from "~/state/query";
@@ -206,7 +212,9 @@ function routeStateLabel(state: FleetRouteState, gt: GT): string {
 
 /** Asks T3 Connect for the account's machines once, as the list's own rows do on mount. */
 function useConnectMachines() {
-  const discovery = useAtomValue(relayEnvironmentDiscovery.stateValueAtom);
+  const gt = useGT();
+  const m = useMessages();
+  const discovery = useRelayEnvironmentDiscovery();
   const refresh = useAtomCommand(relayEnvironmentDiscovery.refresh, { reportFailure: false });
   const discoverIfUnasked = useEffectEvent(() => {
     if (hasCloudPublicConfig() && !discovery.listed && !discovery.refreshing) void refresh();
@@ -215,11 +223,17 @@ function useConnectMachines() {
   useEffect(() => {
     discoverIfUnasked();
   }, []);
-  // A refresh empties the list until it answers; the machines last seen stay on the map meanwhile.
-  const [seen, setSeen] = useState(discovery.environments);
-  const emptied = discovery.refreshing && discovery.environments.size === 0;
-  if (!emptied && seen !== discovery.environments) setSeen(discovery.environments);
-  return emptied ? seen : discovery.environments;
+  const machines = useRetainedRelayEnvironments();
+  // A failed listing is not an account with no machines: say so, with a way to ask again.
+  const message = discovery.refreshing
+    ? null
+    : discovery.offline && !discovery.listed
+      ? gt("You appear to be offline.")
+      : thrownErrorMessage(Option.getOrNull(discovery.error), m);
+  return {
+    machines,
+    problem: message === null ? null : { message, retry: () => void refresh() },
+  };
 }
 
 function useFleetGraph() {
@@ -249,7 +263,7 @@ function useFleetGraph() {
     ),
   );
   const writable = useEnvironmentsWithScope(environments, AuthAccessWriteScope);
-  const connect = useConnectMachines();
+  const { machines: connect, problem: connectProblem } = useConnectMachines();
   const machines = linkableMachines({
     environments,
     threadEnvironmentId: null,
@@ -301,7 +315,7 @@ function useFleetGraph() {
       })),
     now: DateTime.makeUnsafe(nowMinute),
   });
-  return { graph, environments };
+  return { graph, environments, connectProblem };
 }
 
 /** The layout for the graph's current shape; a health or status change reuses the last one. */
@@ -331,7 +345,7 @@ export function EnvironmentsMap(
     "renderSavedEnvironment" | "renderConnectMachine" | "onAddEnvironment"
   > & { readonly footerId?: string },
 ) {
-  const { graph, environments } = useFleetGraph();
+  const { graph, environments, connectProblem } = useFleetGraph();
   const [expanded, setExpanded] = useState(NO_STACKS);
   const stacks = fleetStacks(graph, expanded);
   const { key, layout } = useFleetLayout(graph, stacks);
@@ -391,6 +405,7 @@ export function EnvironmentsMap(
           graph={graph}
           stacks={stacks}
           environments={environments}
+          connectProblem={connectProblem}
           selection={selection}
           onSelect={setPicked}
           onLinkFrom={(sourceId) => requestLink(sourceId, null)}
@@ -527,7 +542,7 @@ function FleetCanvas({ shapeKey, ...scene }: FleetSceneProps & { readonly shapeK
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     // One pointer owns a drag: a second finger neither restarts it nor ends it.
     if (event.button !== 0 || view === null || drag.current !== null) return;
-    if ((event.target as Element).closest("[data-fleet-item],[data-fleet-controls]")) return;
+    if ((event.target as Element).closest("[data-fleet-item]")) return;
     drag.current = {
       pointerId: event.pointerId,
       key: shapeKey,
@@ -572,73 +587,75 @@ function FleetCanvas({ shapeKey, ...scene }: FleetSceneProps & { readonly shapeK
   };
 
   return (
-    <div
-      ref={setCanvas}
-      data-dragging={dragging || undefined}
-      data-glide={glide || undefined}
-      className="relative min-h-65 cursor-grab touch-none overflow-clip rounded-t-xl bg-background/50 select-none data-dragging:cursor-grabbing data-glide:transition-[background-size,background-position] data-glide:duration-200 data-glide:ease-out motion-reduce:transition-none"
-      style={
-        view === null || size === null
-          ? undefined
-          : {
-              height: size.height,
-              backgroundImage: "radial-gradient(circle, var(--border) 1px, transparent 1.5px)",
-              backgroundSize: `${24 * view.scale}px ${24 * view.scale}px`,
-              backgroundPosition: `${view.x}px ${view.y}px`,
-            }
-      }
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={(event) => endDrag(event, false)}
-      onPointerCancel={(event) => endDrag(event, true)}
-      onLostPointerCapture={(event) => endDrag(event, true)}
-      onKeyDown={onKeyDown}
-    >
-      {view === null ? null : (
-        <div
-          data-fleet-scene
-          className="absolute top-0 left-0 origin-top-left in-data-dragging:will-change-transform in-data-glide:transition-transform in-data-glide:duration-200 in-data-glide:ease-out motion-reduce:transition-none"
-          style={{
-            width: layout.width,
-            height: layout.height,
-            transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`,
-          }}
-        >
-          <FleetScene {...scene} onReveal={reveal} />
-        </div>
-      )}
-      <FleetLegend />
+    <>
       <div
-        data-fleet-controls
-        className="absolute top-2 right-2 flex cursor-default items-center gap-1 rounded-lg border border-border/60 bg-popover/90 p-0.5 shadow-xs/5"
+        ref={setCanvas}
+        data-dragging={dragging || undefined}
+        data-glide={glide || undefined}
+        className="relative min-h-65 cursor-grab touch-none overflow-clip rounded-t-xl bg-background/50 select-none data-dragging:cursor-grabbing data-glide:transition-[background-size,background-position] data-glide:duration-200 data-glide:ease-out motion-reduce:transition-none"
+        style={
+          view === null || size === null
+            ? undefined
+            : {
+                height: size.height,
+                backgroundImage: "radial-gradient(circle, var(--border) 1px, transparent 1.5px)",
+                backgroundSize: `${24 * view.scale}px ${24 * view.scale}px`,
+                backgroundPosition: `${view.x}px ${view.y}px`,
+              }
+        }
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={(event) => endDrag(event, false)}
+        onPointerCancel={(event) => endDrag(event, true)}
+        onLostPointerCapture={(event) => endDrag(event, true)}
+        onKeyDown={onKeyDown}
       >
-        <Button
-          size="icon-xs"
-          variant="ghost"
-          aria-label={gt("Zoom out")}
-          onClick={() => zoom(0.8)}
-        >
-          <MinusIcon />
-        </Button>
-        <Button
-          size="icon-xs"
-          variant="ghost"
-          aria-label={gt("Zoom in")}
-          onClick={() => zoom(1.25)}
-        >
-          <PlusIcon />
-        </Button>
-        <Button
-          size="icon-xs"
-          variant="ghost"
-          aria-label={gt("Fit the map to view")}
-          disabled={held === null}
-          onClick={fit}
-        >
-          <MaximizeIcon />
-        </Button>
+        {view === null ? null : (
+          <div
+            data-fleet-scene
+            className="absolute top-0 left-0 origin-top-left in-data-dragging:will-change-transform in-data-glide:transition-transform in-data-glide:duration-200 in-data-glide:ease-out motion-reduce:transition-none"
+            style={{
+              width: layout.width,
+              height: layout.height,
+              transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`,
+            }}
+          >
+            <FleetScene {...scene} onReveal={reveal} />
+          </div>
+        )}
       </div>
-    </div>
+      {/* Below the canvas, not over it: nothing on the map can end up under the controls. */}
+      <div className="flex items-end justify-between gap-3 bg-background/50 px-3 pb-2">
+        <FleetLegend />
+        <div className="flex shrink-0 items-center gap-1 rounded-lg border border-border/60 bg-popover/90 p-0.5 shadow-xs/5">
+          <Button
+            size="icon-xs"
+            variant="ghost"
+            aria-label={gt("Zoom out")}
+            onClick={() => zoom(0.8)}
+          >
+            <MinusIcon />
+          </Button>
+          <Button
+            size="icon-xs"
+            variant="ghost"
+            aria-label={gt("Zoom in")}
+            onClick={() => zoom(1.25)}
+          >
+            <PlusIcon />
+          </Button>
+          <Button
+            size="icon-xs"
+            variant="ghost"
+            aria-label={gt("Fit the map to view")}
+            disabled={held === null}
+            onClick={fit}
+          >
+            <MaximizeIcon />
+          </Button>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -658,7 +675,7 @@ function FleetLegend() {
   return (
     <ul
       aria-label={gt("How to read the lines")}
-      className="pointer-events-none absolute bottom-2 left-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted-foreground"
+      className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 pb-1 text-2xs text-muted-foreground"
     >
       <li className="flex items-center gap-1.5">
         {sample("in-use")}
@@ -1124,9 +1141,17 @@ const FleetScene = memo(function FleetScene({
               target: nodeById.get(edge.to)?.label ?? "",
               summary: linkSummary(edge, gt, m),
             })}
-            style={{ left: badge.x, top: badge.y }}
+            // Hangs off its own lane and grows away from the lanes beside it.
+            style={{
+              top: badge.y,
+              height: badge.height,
+              maxWidth: badge.width,
+              ...(badge.side === 1
+                ? { left: badge.x }
+                : { right: layout.width - badge.x - badge.width }),
+            }}
             className={cn(
-              "absolute flex h-5 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center rounded-full border border-border bg-card px-1.5 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset aria-pressed:border-primary aria-pressed:text-primary",
+              "absolute flex cursor-pointer items-center gap-1.5 rounded-full border border-border bg-card px-1.5 text-2xs leading-none outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset aria-pressed:border-primary aria-pressed:text-primary",
               healthTone(edge.health),
               fadeLine(lit !== null && !lit.edges.has(edge.id)),
             )}
@@ -1136,6 +1161,7 @@ const FleetScene = memo(function FleetScene({
             {...hoverProps(target)}
           >
             <AccessMeter access={edge.link.access} />
+            <span className="truncate">{m(accessConfig[edge.link.access].label)}</span>
           </button>
         );
       })}
@@ -1435,7 +1461,11 @@ const FleetScene = memo(function FleetScene({
                 aria-label={gt("Link {label} to another machine", { label: node.label })}
                 style={{ left: handle.x - 9, top: handle.y - 9 }}
                 onFocus={(event) => {
-                  if (event.currentTarget.matches(":focus-visible")) onReveal(rect);
+                  // Its own bounds: it straddles the card's edge, so the card can be in view
+                  // while half the handle is not.
+                  if (event.currentTarget.matches(":focus-visible")) {
+                    onReveal({ x: handle.x - 9, y: handle.y - 9, width: 18, height: 18 });
+                  }
                 }}
                 className={cn(
                   "absolute flex size-4.5 cursor-crosshair touch-none items-center justify-center rounded-full bg-primary text-primary-foreground outline-none hover:scale-110 focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-inset motion-safe:transition-transform motion-safe:duration-150 forced-colors:border",

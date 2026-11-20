@@ -273,6 +273,30 @@ export function buildFleetGraph(input: {
 export const isLinkEdge = (edge: FleetEdge): edge is FleetLinkEdge => edge.kind === "link";
 export const isRouteEdge = (edge: FleetEdge): edge is FleetRouteEdge => edge.kind === "route";
 
+/**
+ * The setup in two numbers. `links` is null when the total is not known: a list still loading,
+ * none read, or one failed among several. A failed or unread list is not "no links".
+ */
+export function fleetSummary(graph: FleetGraph): {
+  readonly machines: number;
+  readonly links: number | null;
+  readonly loading: boolean;
+} {
+  const connected = graph.nodes.filter(
+    (node) => node.kind === "environment" && node.phase === "connected",
+  ) as FleetEnvironmentNode[];
+  const loading = connected.some((node) => node.outgoing === "loading");
+  const known =
+    !loading &&
+    connected.some((node) => node.outgoing === "loaded") &&
+    !connected.some((node) => node.outgoing === "error");
+  return {
+    machines: graph.nodes.length - 1,
+    links: known ? graph.edges.filter(isLinkEdge).length : null,
+    loading,
+  };
+}
+
 /** Whether a link wants the user's attention: anything but reachable with time left. */
 export const linkNeedsAttention = (health: PeerLinkHealth) =>
   health.kind !== "reachable" || health.expiresInDays !== null;
@@ -476,12 +500,18 @@ export interface FleetRouteGeometry {
   readonly pill: FleetRect;
 }
 
+/** Room for a link's access in words. `side` is the way it grows from the lane it sits on. */
+export type FleetLinkBadge = FleetRect & { readonly side: 1 | -1 };
+
 export interface FleetLinkGeometry {
   readonly d: string;
   /** Arrowhead tip and the horizontal direction it points. */
   readonly arrow: { readonly x: number; readonly y: number; readonly dir: 1 | -1 };
-  /** Where a link between two environments shows its access; a target's card shows its own. */
-  readonly badge: FleetPoint | null;
+  /**
+   * Where a link between two environments names its access; a target's card shows its own.
+   * Null too where so many links pass that a name would sit on another's.
+   */
+  readonly badge: FleetLinkBadge | null;
 }
 
 export interface FleetStackGeometry {
@@ -532,9 +562,12 @@ const LINK_RUN = 92;
 const ARROW_LENGTH = 6;
 /** How far apart two hosts' links enter one machine, so each keeps its own last stretch. */
 const ENTRY_PITCH = 14;
-const HOST_ENTRY = { first: 12, pitch: 8, reach: 12 };
+/** The channel left of the cards that links between environments keep to themselves. */
+const BETWEEN = { first: 16, step: 14, last: 10 };
+/** Where those links meet a card's left edge: past its routes, the outermost lane innermost. */
+const LINK_PORT = { first: 4, pitch: 8, margin: 8 };
 const CORNER = 8;
-const BADGE = { width: 34, height: 24 };
+const BADGE = { width: 120, height: 20, overhang: 5, gap: 4 };
 
 /** Horizontal, a vertical run at `viaX`, then horizontal again, with rounded turns. */
 function elbowPath(x0: number, y0: number, viaX: number, x1: number, y1: number): string {
@@ -574,19 +607,21 @@ interface FleetRow {
   readonly items: ReadonlyArray<BayItem>;
 }
 
-/** A vertical run in the channel beside the environments, kept to itself for its whole span. */
+/** One host's vertical run to a row of shared machines, kept to itself for its whole span. */
 interface FleetLane {
   readonly id: string;
-  readonly between: boolean;
   readonly from: number;
   readonly to: number;
+  /** Where its links turn off towards their machines. */
+  readonly branches: ReadonlyArray<number>;
   index: number;
 }
 
 /**
  * This client, the machines it knows, and those seen only through a link: beside the one host
- * linking to them, or in a row between the several that do. A link leaving its host's row takes
- * its own lane and its own entry, so two hosts' links never share a stretch. Deterministic.
+ * linking to them, or in a row between the several that do. Links to those run right of the
+ * environments and links between two environments run left of them, each on its own lane with
+ * its own entry, so two hosts' links never share a stretch. Deterministic.
  */
 export function layoutFleetGraph(
   graph: FleetGraph,
@@ -666,15 +701,64 @@ export function layoutFleetGraph(
     if (shared !== null) rows.push(shared);
   }
 
-  const cardHeight = (host: FleetNode) =>
-    host.kind === "connect"
-      ? OFFER.height
+  // Links between environments: shorter ones take the lanes nearer the cards, and two share a
+  // lane when no host lies between both pairs, so a chain of links reads as one line.
+  const reach = (link: FleetLinkEdge) => Math.abs(indexOf(link.to) - indexOf(link.from));
+  const low = (link: FleetLinkEdge) => Math.min(indexOf(link.from), indexOf(link.to));
+  const high = (link: FleetLinkEdge) => Math.max(indexOf(link.from), indexOf(link.to));
+  const between = links
+    .filter((link) => hostIndex.has(link.from) && hostIndex.has(link.to))
+    .toSorted((left, right) => reach(left) - reach(right) || (left.id < right.id ? -1 : 1));
+  const betweenLanes: FleetLinkEdge[][] = [];
+  const betweenLane = new Map<string, number>();
+  for (const link of between) {
+    let index = 0;
+    while (
+      betweenLanes[index]?.some(
+        (other) => Math.max(low(other), low(link)) < Math.min(high(other), high(link)),
+      )
+    ) {
+      index += 1;
+    }
+    betweenLane.set(link.id, index);
+    (betweenLanes[index] ??= []).push(link);
+  }
+  // Each end of such a link has its own port on the card's left edge, above the routes when the
+  // other machine is above and below them when it is below. The outer lane's port is nearer the
+  // middle, so two links turning at one card never cross.
+  const portsOf = new Map<string, FleetLinkEdge[]>();
+  for (const link of between) {
+    const down = Math.sign(indexOf(link.to) - indexOf(link.from));
+    for (const key of [`${link.from}:${down}`, `${link.to}:${-down}`]) {
+      portsOf.set(key, [...(portsOf.get(key) ?? []), link]);
+    }
+  }
+  for (const ports of portsOf.values()) {
+    ports.sort((left, right) => betweenLane.get(right.id)! - betweenLane.get(left.id)!);
+  }
+  const routesInto = (hostId: string) => routeEdges.filter((edge) => edge.to === hostId).length;
+  const routesExtent = (hostId: string) =>
+    ((Math.max(1, routesInto(hostId)) - 1) * PORT_PITCH + PILL.height) / 2;
+  const cardHeight = (host: FleetNode) => {
+    const ports = Math.max(
+      portsOf.get(`${host.id}:-1`)?.length ?? 0,
+      portsOf.get(`${host.id}:1`)?.length ?? 0,
+    );
+    const plain =
+      host.kind === "connect"
+        ? OFFER.height
+        : Math.max(CARD.height, (routesInto(host.id) - 1) * PORT_PITCH + PILL.height + 20);
+    return ports === 0
+      ? plain
       : Math.max(
-          CARD.height,
-          (routeEdges.filter((edge) => edge.to === host.id).length - 1) * PORT_PITCH +
-            PILL.height +
-            20,
+          plain,
+          2 *
+            (routesExtent(host.id) +
+              LINK_PORT.first +
+              (ports - 1) * LINK_PORT.pitch +
+              LINK_PORT.margin),
         );
+  };
   const itemSize = (item: BayItem) => {
     if (item.kind === "target") {
       return {
@@ -694,7 +778,12 @@ export function layoutFleetGraph(
   };
 
   const pillX = CLIENT.width + WIRE;
-  const cardX = pillX + PILL.width + PILL_GAP;
+  const cardX =
+    pillX +
+    PILL.width +
+    (betweenLanes.length === 0
+      ? PILL_GAP
+      : BETWEEN.last + (betweenLanes.length - 1) * BETWEEN.step + BETWEEN.first);
   const cardRight = cardX + CARD.width;
 
   // Heights first: which lanes the channel needs, and so how wide it is, follows from them.
@@ -746,64 +835,47 @@ export function layoutFleetGraph(
       );
     });
   }
-  // Links between environments arrive above the centre from above and below it from below.
-  // The longest takes the entry nearest the centre, so two arriving together never cross.
-  const between = links.filter((link) => hostIndex.has(link.to));
-  const reach = (link: FleetLinkEdge) => Math.abs(indexOf(link.to) - indexOf(link.from));
-  for (const host of hosts) {
-    for (const side of [-1, 1]) {
-      const arriving = between
-        .filter(
-          (link) =>
-            link.to === host.id && Math.sign(indexOf(link.to) - indexOf(link.from)) === -side,
-        )
-        .toSorted((left, right) => reach(right) - reach(left) || (left.id < right.id ? -1 : 1));
-      const pitch = Math.min(HOST_ENTRY.pitch, HOST_ENTRY.reach / Math.max(1, arriving.length - 1));
-      arriving.forEach((link, index) => {
-        entryY.set(link.id, centerOf(host.id) + side * (HOST_ENTRY.first + index * pitch));
-      });
-    }
-  }
+  const portY = (link: FleetLinkEdge, hostId: string) => {
+    const side = Math.sign(indexOf(link.from === hostId ? link.to : link.from) - indexOf(hostId));
+    const port = portsOf.get(`${hostId}:${side}`)!.indexOf(link);
+    return (
+      centerOf(hostId) + side * (routesExtent(hostId) + LINK_PORT.first + port * LINK_PORT.pitch)
+    );
+  };
 
-  // One lane per link between environments and one per host for each shared row it reaches.
-  // Shorter runs sit nearer the cards, so a longer one passes outside them instead of through.
+  // One lane per host for each shared row it reaches.
   const trunkOf = new Map<string, FleetLane>();
-  const lanes: FleetLane[] = between.map((link) => ({
-    id: link.id,
-    between: true,
-    from: centerOf(link.from),
-    to: entryY.get(link.id)!,
-    index: 0,
-  }));
+  const lanes: FleetLane[] = [];
   for (const [anchor, band] of bandOf) {
-    const trunks = new Map<string, FleetLane>();
-    for (const item of band) {
-      if (item.kind !== "target") continue;
-      for (const link of item.incoming) {
-        const from = centerOf(link.from);
-        const to = entryY.get(link.id)!;
-        const known = trunks.get(link.from);
-        const lane: FleetLane =
-          known === undefined || Math.abs(to - from) > Math.abs(known.to - from)
-            ? { id: `${link.from}>${anchor}`, between: false, from, to, index: 0 }
-            : known;
-        trunks.set(link.from, lane);
-      }
+    const incoming = band.flatMap((item) => (item.kind === "target" ? item.incoming : []));
+    for (const hostId of new Set(incoming.map((link) => link.from))) {
+      const from = centerOf(hostId);
+      const mine = incoming.filter((link) => link.from === hostId);
+      const branches = mine.map((link) => entryY.get(link.id)!);
+      const lane: FleetLane = {
+        id: `${hostId}>${anchor}`,
+        from,
+        to: branches.reduce((far, y) => (Math.abs(y - from) > Math.abs(far - from) ? y : far)),
+        branches,
+        index: 0,
+      };
+      for (const link of mine) trunkOf.set(link.id, lane);
+      lanes.push(lane);
     }
-    for (const item of band) {
-      if (item.kind !== "target") continue;
-      for (const link of item.incoming) trunkOf.set(link.id, trunks.get(link.from)!);
-    }
-    lanes.push(...trunks.values());
   }
   const span = (lane: FleetLane) => Math.abs(lane.to - lane.from);
+  const passes = (lane: FleetLane, at: number) =>
+    at > Math.min(lane.from, lane.to) && at < Math.max(lane.from, lane.to);
+  // What `inner` nearer the cards costs: each of its turn-offs that has to cross `outer`, and
+  // `outer` leaving its host across it. Of two lanes the one that costs less goes inside.
+  const crossings = (inner: FleetLane, outer: FleetLane) =>
+    inner.branches.filter((at) => passes(outer, at)).length + Number(passes(inner, outer.from));
   const taken: FleetLane[][] = [];
-  for (const lane of lanes.toSorted(
-    (left, right) =>
-      Number(right.between) - Number(left.between) ||
-      span(left) - span(right) ||
-      (left.id < right.id ? -1 : 1),
-  )) {
+  for (const lane of lanes
+    .toSorted((left, right) => (left.id < right.id ? -1 : 1))
+    .toSorted(
+      (left, right) => crossings(left, right) - crossings(right, left) || span(left) - span(right),
+    )) {
     const top = Math.min(lane.from, lane.to) - LANE_CLEARANCE;
     const bottom = Math.max(lane.from, lane.to) + LANE_CLEARANCE;
     let index = 0;
@@ -898,30 +970,56 @@ export function layoutFleetGraph(
     });
   }
 
-  // The badge sits on the link's own lane, in the gap just past the environment it leaves, so
-  // it is never beside a machine the link has nothing to do with. A second one steps onward.
-  const badges: FleetPoint[] = [];
-  for (const lane of lanes) {
-    if (!lane.between) continue;
-    const link = between.find((entry) => entry.id === lane.id)!;
-    const source = nodes.get(link.from)!;
-    const direction = Math.sign(lane.to - lane.from) || 1;
-    const x = laneX(lane);
-    let badgeY =
-      (direction > 0 ? source.y + source.height : source.y) + (direction * GROUP_GAP) / 2;
-    while (
-      badges.some(
-        (other) => Math.abs(other.x - x) < BADGE.width && Math.abs(other.y - badgeY) < BADGE.height,
-      )
-    ) {
-      badgeY += direction * BADGE.height;
+  // A link between environments names its access on its own lane, in a gap between two cards:
+  // the one just past the environment it leaves, or the next one free. It grows away from the
+  // other lanes passing there; where it cannot, it may cover one, but never another name.
+  const runs = between.map((link) => ({
+    link,
+    x: cardX - BETWEEN.first - betweenLane.get(link.id)! * BETWEEN.step,
+    from: portY(link, link.from),
+    to: portY(link, link.to),
+  }));
+  const badges: FleetLinkBadge[] = [];
+  for (const run of runs) {
+    const { link, x } = run;
+    const down = indexOf(link.to) > indexOf(link.from);
+    const gaps: number[] = [];
+    for (let index = low(link); index < high(link); index += 1) {
+      const above = nodes.get(hosts[index]!.id)!;
+      const below = nodes.get(hosts[index + 1]!.id)!;
+      gaps.push(above.y + above.height + GROUP_GAP / 2, below.y - GROUP_GAP / 2);
     }
-    const badge = { x, y: badgeY };
-    badges.push(badge);
-    width = Math.max(width, x + BADGE.width / 2);
+    if (!down) gaps.reverse();
+    const place = (y: number, side: 1 | -1): FleetLinkBadge => ({
+      x: side === 1 ? x - BADGE.overhang : x + BADGE.overhang - BADGE.width,
+      y: y - BADGE.height / 2,
+      width: BADGE.width,
+      height: BADGE.height,
+      side,
+    });
+    const clearOfLanes = (badge: FleetLinkBadge) =>
+      !runs.some(
+        (other) =>
+          other !== run &&
+          other.x > badge.x &&
+          other.x < badge.x + badge.width &&
+          Math.min(other.from, other.to) < badge.y + badge.height &&
+          Math.max(other.from, other.to) > badge.y,
+      );
+    const clearOfNames = (badge: FleetLinkBadge) =>
+      !badges.some(
+        (other) =>
+          other.x < badge.x + badge.width + BADGE.gap &&
+          badge.x < other.x + other.width + BADGE.gap &&
+          other.y < badge.y + badge.height + BADGE.gap &&
+          badge.y < other.y + other.height + BADGE.gap,
+      );
+    const options = gaps.flatMap((y) => [place(y, 1), place(y, -1)]).filter(clearOfNames);
+    const badge = options.find(clearOfLanes) ?? options[0] ?? null;
+    if (badge !== null) badges.push(badge);
     linkGeometry.set(link.id, {
-      d: elbowPath(cardRight, lane.from, x, cardRight + ARROW_LENGTH, lane.to),
-      arrow: { x: cardRight, y: lane.to, dir: -1 },
+      d: elbowPath(cardX, run.from, x, cardX - ARROW_LENGTH, run.to),
+      arrow: { x: cardX, y: run.to, dir: 1 },
       badge,
     });
   }

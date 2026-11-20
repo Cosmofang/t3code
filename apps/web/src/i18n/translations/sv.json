@@ -8722,6 +8722,7 @@
   "6698127fcc912f23": "Länka en annan dator som kör T3 Code, till exempel en VPS, så att agenter här kan starta och styra trådar där.",
   "e1789f863205ad5a": "Kunde inte länka miljön",
   "40cde51afa218290": "Länkade {label}",
+  "64ac3d1579ca9f5b": "Länka {source} till {target}",
   "fb71127e5746a6bc": "Från Delning och åtkomst där, eller t3 pair",
   "ad5ed0ce61b966eb": "Glöm {label}? Agenter här slutar arbeta där. Återkalla ”T3 Code · …” under Delning och åtkomst på {label} för att avsluta sessionen där också.",
   "81c9796bf61b306a": "Kunde inte glömma länken",

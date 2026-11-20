@@ -8724,6 +8724,7 @@
   "6698127fcc912f23": "Link another machine running T3 Code, such as a VPS, so agents here can launch and drive threads there.",
   "e1789f863205ad5a": "Could not link the environment",
   "40cde51afa218290": "Linked {label}",
+  "64ac3d1579ca9f5b": "Link {source} to {target}",
   "fb71127e5746a6bc": "From Sharing & access there, or t3 pair",
   "ad5ed0ce61b966eb": "Forget {label}? Agents here stop working there. Revoke \"T3 Code · …\" in {label}''s Sharing & access to end the session there too.",
   "81c9796bf61b306a": "Could not forget the link",

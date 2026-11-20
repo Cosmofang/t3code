@@ -8716,6 +8716,7 @@
   "6698127fcc912f23": "Associez une autre machine qui exécute T3 Code, comme un VPS, pour que les agents d’ici puissent y lancer et piloter des fils.",
   "e1789f863205ad5a": "Impossible d’associer l’environnement",
   "40cde51afa218290": "{label} associé",
+  "64ac3d1579ca9f5b": "Associer {source} à {target}",
   "fb71127e5746a6bc": "Depuis Partage et accès sur cette machine, ou t3 pair",
   "ad5ed0ce61b966eb": "Oublier {label} ? Les agents d’ici cessent d’y travailler. Révoquez « T3 Code · … » dans Partage et accès sur {label} pour y fermer aussi la session.",
   "81c9796bf61b306a": "Impossible d’oublier l’association",

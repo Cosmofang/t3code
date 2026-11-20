@@ -7,7 +7,7 @@ import {
   resolveEnvironmentMachineKind,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
-import { useGT, useMessages } from "gt-react";
+import { T, useGT, useMessages } from "gt-react";
 import { ArrowRightIcon, ClockAlertIcon, PlusIcon, TriangleAlertIcon, XIcon } from "lucide-react";
 import { type ReactNode, useRef } from "react";
 
@@ -27,6 +27,7 @@ import {
   type FleetLinkEdge,
   type FleetNode,
   type FleetStack,
+  fleetSummary,
   isLinkEdge,
   linkNeedsAttention,
 } from "./environmentsMap.logic";
@@ -109,6 +110,8 @@ export interface FleetDetailsProps {
   readonly graph: FleetGraph;
   readonly stacks: ReadonlyArray<FleetStack>;
   readonly environments: ReadonlyArray<EnvironmentPresentation>;
+  /** Why the account's T3 Connect machines are missing from the map, and how to ask again. */
+  readonly connectProblem: { readonly message: string; readonly retry: () => void } | null;
   readonly selection: FleetFocus | null;
   readonly onSelect: (focus: FleetFocus | null) => void;
   /** Opens the link flow from an environment, with no target picked yet. */
@@ -124,7 +127,7 @@ const SECTION = "px-3 py-3 sm:px-4";
 
 /** What is selected on the map, with the controls the list keeps on each row. */
 export function FleetDetails(props: FleetDetailsProps) {
-  const { graph, stacks, selection, onSelect } = props;
+  const { graph, stacks, selection, onSelect, connectProblem } = props;
   const gt = useGT();
   const panel = useRef<HTMLDivElement>(null);
   const links = graph.edges.filter(isLinkEdge);
@@ -148,6 +151,19 @@ export function FleetDetails(props: FleetDetailsProps) {
       aria-label={gt("Details")}
       className="min-h-20 border-t border-border/60 text-xs outline-none"
     >
+      {connectProblem ? (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border/60 px-3 py-2 sm:px-4">
+          <p className="min-w-0 flex-1 text-muted-foreground">
+            <span className="font-medium text-destructive">
+              <T>Could not load T3 Connect environments</T>
+            </span>{" "}
+            {connectProblem.message}
+          </p>
+          <Button size="xs" variant="outline" onClick={connectProblem.retry}>
+            {gt("Try again")}
+          </Button>
+        </div>
+      ) : null}
       {edge ? (
         <div className={SECTION}>
           <LinkDetails
@@ -192,23 +208,17 @@ function FleetSummary({
   readonly links: ReadonlyArray<FleetLinkEdge>;
 }) {
   const gt = useGT();
-  const reading = graph.nodes.filter((entry) => entry.kind === "environment");
-  const settled = reading.every(
-    (entry) => entry.phase !== "connected" || entry.outgoing !== "loading",
-  );
-  // Counts come only from lists that loaded: a failed or unread list is not "no links", and
-  // one failed list among several leaves the total unknown.
-  const readable =
-    reading.some((entry) => entry.outgoing === "loaded") &&
-    !reading.some((entry) => entry.phase === "connected" && entry.outgoing === "error");
+  const summary = fleetSummary(graph);
   const attention = links.filter((edge) => linkNeedsAttention(edge.health)).length;
-  const machines = graph.nodes.length - 1;
-  const canLink = reading.some((entry) => entry.linking === "ready");
+  const { machines } = summary;
+  const canLink = graph.nodes.some(
+    (entry) => entry.kind === "environment" && entry.linking === "ready",
+  );
   return (
     <div className={SECTION}>
       <Heading
         detail={
-          !settled
+          summary.loading
             ? gt("Loading links…")
             : attention > 0
               ? gt(
@@ -218,10 +228,10 @@ function FleetSummary({
               : null
         }
       >
-        {settled && readable
+        {summary.links !== null
           ? gt(
               "{machines, plural, one {# machine} other {# machines}}, {links, plural, =0 {no links} one {# link} other {# links}}",
-              { machines, links: links.length },
+              { machines, links: summary.links },
             )
           : gt("{machines, plural, one {# machine} other {# machines}}", { machines })}
       </Heading>
