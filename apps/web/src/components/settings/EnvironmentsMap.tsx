@@ -766,9 +766,9 @@ const FleetScene = memo(function FleetScene({
     linkDrag !== null
       ? id !== linkDrag.sourceId && dragOffer(id)?.kind !== "link"
       : lit !== null && !lit.nodes.has(id);
+  // By the links it stands for: a host and a member can both be lit through other links.
   const stackLit = (stack: FleetStack) =>
-    lit === null ||
-    (lit.nodes.has(stack.sourceId) && stack.memberIds.some((id) => lit.nodes.has(id)));
+    lit === null || stack.edgeIds.some((id) => lit.edges.has(id));
   const hoverProps = (target: FleetFocus) => ({
     onPointerEnter: () => setHover(target),
     onPointerLeave: () => setHover(null),

@@ -776,6 +776,8 @@ export function layoutFleetGraph(
     });
   }
 
+  // A badge stepped below its neighbours can end up past the last machine.
+  const badgeBottom = Math.max(0, ...badges.map((badge) => badge.y + BADGE.height / 2));
   return {
     nodes,
     stacks: stackGeometry,
@@ -788,7 +790,7 @@ export function layoutFleetGraph(
       ...(bayOf.size > 0 ? [{ id: "targets" as const, x: bayX }] : []),
     ],
     width,
-    height,
+    height: Math.max(height, badgeBottom),
   };
 }
 

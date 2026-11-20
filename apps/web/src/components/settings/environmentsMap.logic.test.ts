@@ -416,6 +416,12 @@ describe("layoutFleetGraph", () => {
     const badge = (from: string, to: string) =>
       layout.links.get(`link:${node(from)}>${node(to)}`)!.badge;
     expect(badge("a", "x")).toBeNull();
+    // Many links into one bay step their badges down; the map must still contain them.
+    const shared = build([environment("a", vms(4)), environment("b", [...vms(4), link("a")])]);
+    const crowded = layoutFleetGraph(shared);
+    for (const geometry of crowded.links.values()) {
+      if (geometry.badge) expect(geometry.badge.y + 12).toBeLessThanOrEqual(crowded.height);
+    }
     const badges = [badge("a", "b")!, badge("b", "a")!, badge("b", "x")!];
     for (const [index, left] of badges.entries()) {
       for (const right of badges.slice(index + 1)) {
