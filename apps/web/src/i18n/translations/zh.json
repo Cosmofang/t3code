@@ -12259,5 +12259,7 @@
   "c56a6b0a19385e2b": "已开始",
   "b2be70822d55f16a": "打开",
   "51a6253a30722d04": "还有 {count} 个",
-  "8b5ab57fe4f817d2": "{label} 详情"
+  "8b5ab57fe4f817d2": "{label} 详情",
+  "08b81f7020eb5e55": "展开{section}",
+  "805e58bba67fc3e1": "收起{section}"
 }

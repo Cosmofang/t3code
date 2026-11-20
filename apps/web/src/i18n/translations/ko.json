@@ -12178,5 +12178,7 @@
   "c56a6b0a19385e2b": "Started",
   "b2be70822d55f16a": "Open",
   "51a6253a30722d04": "{count} more",
-  "8b5ab57fe4f817d2": "{label} details"
+  "8b5ab57fe4f817d2": "{label} details",
+  "08b81f7020eb5e55": "Expand {section}",
+  "805e58bba67fc3e1": "Collapse {section}"
 }

@@ -14,8 +14,10 @@ import {
   FileTextIcon,
   LoaderCircleIcon,
 } from "lucide-react";
-import { useState } from "react";
+import * as Schema from "effect/Schema";
+import { type ReactNode, useState } from "react";
 
+import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { displayThreadTitle } from "../../lib/threadTitle";
 import { cn } from "../../lib/utils";
 import { useRightPanelStore } from "../../rightPanelStore";
@@ -43,23 +45,74 @@ const sectionCount = (text: string) => (
   <span className="text-2xs font-medium text-muted-foreground tabular-nums">{text}</span>
 );
 
+/** Whether a section is folded; one choice for every thread. */
+function useSectionCollapsed(section: "progress" | "side-tasks" | "related-files") {
+  return useLocalStorage(`t3code:thread-details:${section}-collapsed`, false, Schema.Boolean);
+}
+
+/** The heading's fold toggle; `children` (a count) stays visible while folded. */
+function SectionFoldButton({
+  title,
+  collapsed,
+  onToggle,
+  children,
+}: {
+  readonly title: string;
+  readonly collapsed: boolean;
+  readonly onToggle: () => void;
+  readonly children?: ReactNode;
+}) {
+  const gt = useGT();
+  return (
+    <button
+      type="button"
+      aria-expanded={!collapsed}
+      aria-label={
+        collapsed
+          ? gt("Expand {section}", { section: title })
+          : gt("Collapse {section}", { section: title })
+      }
+      onClick={onToggle}
+      className="inline-flex h-6 cursor-pointer items-center gap-1 rounded-sm px-1 text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+    >
+      {children}
+      <ChevronDownIcon
+        aria-hidden
+        className={cn("size-3.5 transition-transform", collapsed && "-rotate-90")}
+      />
+    </button>
+  );
+}
+
 /** The agent's newest plan, finished steps checked and the running one marked. */
 export function ThreadProgressSection({ threadRef }: { readonly threadRef: ScopedThreadRef }) {
   const gt = useGT();
   const steps = latestPlanSteps(useQuietThreadVisibleTurnItems(threadRef));
+  const [collapsed, setCollapsed] = useSectionCollapsed("progress");
   if (steps === null || steps.length === 0) return null;
   const done = steps.filter((step) => step.status === "completed").length;
+  const title = gt("Progress");
   return (
     <ThreadDetailsSection
       headingId="thread-details-progress-heading"
-      title={gt("Progress")}
-      actions={sectionCount(`${done}/${steps.length}`)}
+      title={title}
+      actions={
+        <SectionFoldButton
+          title={title}
+          collapsed={collapsed}
+          onToggle={() => setCollapsed(!collapsed)}
+        >
+          {sectionCount(`${done}/${steps.length}`)}
+        </SectionFoldButton>
+      }
     >
-      <ol className="m-0 flex list-none flex-col gap-1.5 px-2.5 py-0.5">
-        {steps.map((step) => (
-          <PlanStepRow key={step.id} step={step} />
-        ))}
-      </ol>
+      {collapsed ? null : (
+        <ol className="m-0 flex list-none flex-col gap-1.5 px-2.5 py-0.5">
+          {steps.map((step) => (
+            <PlanStepRow key={step.id} step={step} />
+          ))}
+        </ol>
+      )}
     </ThreadDetailsSection>
   );
 }
@@ -117,42 +170,55 @@ export function ThreadSideTasksSection({
 }) {
   const gt = useGT();
   const tasks = useThreadSideTasks(threadRef).filter((task) => task.status !== "dismissed");
+  const [collapsed, setCollapsed] = useSectionCollapsed("side-tasks");
   if (tasks.length === 0) return null;
   const pending = tasks.filter((task) => task.status === "pending");
+  const title = gt("Side tasks");
+  const pendingAction =
+    pending.length > 1 ? (
+      <ThreadDetailsControl
+        size="xs"
+        variant="ghost"
+        part="meta"
+        onClick={() => {
+          for (const task of pending) {
+            void startSideTask(threadRef, task, "same", gt("Could not start side task"));
+          }
+        }}
+      >
+        {gt("Start all")}
+      </ThreadDetailsControl>
+    ) : pending.length === 1 ? (
+      sectionCount("1")
+    ) : null;
   return (
     <ThreadDetailsSection
       headingId="thread-details-side-tasks-heading"
-      title={gt("Side tasks")}
+      title={title}
       actions={
-        pending.length > 1 ? (
-          <ThreadDetailsControl
-            size="xs"
-            variant="ghost"
-            part="meta"
-            onClick={() => {
-              for (const task of pending) {
-                void startSideTask(threadRef, task, "same", gt("Could not start side task"));
-              }
-            }}
-          >
-            {gt("Start all")}
-          </ThreadDetailsControl>
-        ) : pending.length === 1 ? (
-          sectionCount("1")
-        ) : null
+        <>
+          {pendingAction}
+          <SectionFoldButton
+            title={title}
+            collapsed={collapsed}
+            onToggle={() => setCollapsed(!collapsed)}
+          />
+        </>
       }
     >
-      <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
-        {tasks.map((task) => (
-          <SideTaskRow
-            key={task.id}
-            task={task}
-            threadRef={threadRef}
-            onDoItHere={onDoItHere}
-            onOpenThread={onOpenThread}
-          />
-        ))}
-      </ul>
+      {collapsed ? null : (
+        <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+          {tasks.map((task) => (
+            <SideTaskRow
+              key={task.id}
+              task={task}
+              threadRef={threadRef}
+              onDoItHere={onDoItHere}
+              onOpenThread={onOpenThread}
+            />
+          ))}
+        </ul>
+      )}
     </ThreadDetailsSection>
   );
 }
@@ -301,23 +367,48 @@ function StartedTaskLink({
 export function ThreadRelatedFilesSection({ threadRef }: { readonly threadRef: ScopedThreadRef }) {
   const gt = useGT();
   const files = threadChangedFiles(useThreadCheckpointSummaries(threadRef));
+  const [collapsed, setCollapsed] = useSectionCollapsed("related-files");
+  // Showing every file lasts only for the thread it was chosen in.
+  const threadKey = `${threadRef.environmentId}:${threadRef.threadId}`;
+  const [showAllFor, setShowAllFor] = useState<string | null>(null);
   if (files.length === 0) return null;
+  const showAll = showAllFor === threadKey;
+  const listed = showAll ? files : files.slice(0, MAX_LISTED_FILES);
+  const title = gt("Related files");
   return (
     <ThreadDetailsSection
       headingId="thread-details-related-files-heading"
-      title={gt("Related files")}
-      actions={sectionCount(String(files.length))}
+      title={title}
+      actions={
+        <SectionFoldButton
+          title={title}
+          collapsed={collapsed}
+          onToggle={() => setCollapsed(!collapsed)}
+        >
+          {sectionCount(String(files.length))}
+        </SectionFoldButton>
+      }
     >
-      <ul className="m-0 list-none p-0">
-        {files.slice(0, MAX_LISTED_FILES).map((file) => (
-          <ChangedFileRow key={file.path} file={file} threadRef={threadRef} />
-        ))}
-      </ul>
-      {files.length > MAX_LISTED_FILES ? (
-        <p className="px-2.5 pt-1 text-2xs text-muted-foreground">
-          {gt("{count} more", { count: files.length - MAX_LISTED_FILES })}
-        </p>
-      ) : null}
+      {collapsed ? null : (
+        <>
+          <ul className="m-0 list-none p-0">
+            {listed.map((file) => (
+              <ChangedFileRow key={file.path} file={file} threadRef={threadRef} />
+            ))}
+          </ul>
+          {files.length > MAX_LISTED_FILES ? (
+            <button
+              type="button"
+              onClick={() => setShowAllFor(showAll ? null : threadKey)}
+              className="cursor-pointer px-2.5 pt-1 text-2xs text-muted-foreground outline-none hover:text-foreground focus-visible:underline"
+            >
+              {showAll
+                ? gt("Show fewer")
+                : gt("{count} more", { count: files.length - MAX_LISTED_FILES })}
+            </button>
+          ) : null}
+        </>
+      )}
     </ThreadDetailsSection>
   );
 }
