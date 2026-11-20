@@ -14,7 +14,7 @@ import {
 import * as DateTime from "effect/DateTime";
 import { describe, expect, it } from "vite-plus/test";
 
-import { compactBeforeSendTokens } from "./contextWindow.ts";
+import { compactBeforeSendTokens, latestOutputTokensPerSecond } from "./contextWindow.ts";
 import type { ThreadStructure } from "./models.ts";
 import { v2Projection } from "./orchestrationV2TestFixtures.ts";
 
@@ -260,5 +260,34 @@ describe("compactBeforeSendTokens", () => {
     expect(compactBeforeSendTokens(sendInput(overrides as Parameters<typeof sendInput>[0]))).toBe(
       expected ? 293_611 : null,
     );
+  });
+});
+
+describe("latestOutputTokensPerSecond", () => {
+  const active = ProviderThreadId.make("provider-thread:active");
+  const other = ProviderThreadId.make("provider-thread:other");
+  const turn = (
+    providerThreadId: ProviderThreadId,
+    updatedAt: string,
+    outputTokensPerSecond?: number,
+  ) => ({
+    providerThreadId,
+    tokenUsage: {
+      usedTokens: 1_000,
+      updatedAt,
+      ...(outputTokensPerSecond === undefined ? {} : { outputTokensPerSecond }),
+    },
+  });
+
+  it("keeps the newest timed speed while a new turn has not timed one yet", () => {
+    const turns = [
+      turn(active, "2026-11-19T08:00:00.000Z", 60),
+      turn(active, "2026-11-19T08:01:00.000Z", 80),
+      turn(active, "2026-11-19T08:02:00.000Z"),
+      turn(other, "2026-11-19T08:03:00.000Z", 200),
+    ];
+    expect(latestOutputTokensPerSecond(turns, { id: active })).toBe(80);
+    expect(latestOutputTokensPerSecond(turns)).toBe(200);
+    expect(latestOutputTokensPerSecond([turn(active, "2026-11-19T08:00:00.000Z")])).toBeNull();
   });
 });

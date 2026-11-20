@@ -72,20 +72,21 @@ export function layoutThreadFolders<
   };
 }
 
-export type ThreadFolderPlacement = "open" | "working" | "snoozed" | "settled";
+export type ThreadFolderPlacement = "open" | "snoozed" | "settled";
 
 /**
  * Where a folder shows: on a shelf when every member is on that shelf, else with the open
  * threads. A pinned member keeps the folder open, and one woken member brings it back.
+ * Running is not a shelf for folders: a folder stays put while its threads work.
  */
 export function resolveThreadFolderPlacement(
-  sections: ReadonlyArray<"pinned" | "active" | "working" | "snoozed" | "settled">,
+  sections: ReadonlyArray<"pinned" | "active" | "snoozed" | "settled">,
   options: { readonly folderPinned?: boolean } = {},
 ): ThreadFolderPlacement {
   if (options.folderPinned === true) return "open";
   const first = sections[0];
   if (first === undefined || sections.some((section) => section !== first)) return "open";
-  return first === "working" || first === "snoozed" || first === "settled" ? first : "open";
+  return first === "snoozed" || first === "settled" ? first : "open";
 }
 
 /** The folder that holds a thread, if any. */

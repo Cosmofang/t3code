@@ -220,6 +220,8 @@ import {
 } from "./ComposerAttachmentStrip";
 import { CollapsedComposerStopAction, ComposerPrimaryActions } from "./ComposerPrimaryActions";
 import { ComposerFooterPrimaryActions } from "./ComposerFooterControls";
+import { ComposerContextMeter } from "./ComposerContextMeter";
+import type { ContextWindowSnapshot } from "@t3tools/client-runtime/state/context-window";
 import { ComposerPendingUserInputPanel } from "./ComposerPendingUserInputPanel";
 import { resolveComposerMenuActiveItemId } from "./composerMenuHighlight";
 import { buildPullRequestReferenceContext } from "../pullRequest/pullRequestDetail.logic";
@@ -246,6 +248,7 @@ import { observeResize } from "~/lib/observeResize";
 const isEnvironmentRequestInvalidError = Schema.is(EnvironmentRequestInvalidError);
 import { toastManager } from "../ui/toast";
 import { m as resolveMessage } from "../../i18n/messages";
+import { displayThreadTitle } from "../../lib/threadTitle";
 import { BuildingIcon, PlayIcon, ReplyIcon } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { assistantCitationLabel } from "@t3tools/shared/assistantCitations";
@@ -391,6 +394,10 @@ export interface ChatComposerProps {
   canSteer: boolean;
   bannerItems: readonly ComposerBannerStackItem[];
   resumeCompactionTokens: number | null;
+  /** The open thread's context window, shown as a ring beside the send button. */
+  contextWindow: ContextWindowSnapshot | null;
+  /** Fork: the newest model request's output speed, shown beside the context window. */
+  outputTokensPerSecond: number | null;
   keepFullHistory: boolean;
   onToggleKeepFullHistory: () => void;
   onUsageLimitsCommand?: (() => void) | undefined;
@@ -3693,7 +3700,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     // Switching threads lands focus here, so the label names the thread.
                     ariaLabel={
                       activeThread
-                        ? gt("Message {title}", { title: activeThread.title })
+                        ? gt("Message {title}", {
+                            title: displayThreadTitle(activeThread.title, m),
+                          })
                         : gt("Message", { $context: "noun, label of the message input" })
                     }
                     suggestionListId={composerSuggestionListId}
@@ -3877,6 +3886,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     keepFullHistory={props.keepFullHistory}
                     onToggleKeepFullHistory={props.onToggleKeepFullHistory}
                   >
+                    <ComposerContextMeter
+                      usage={props.contextWindow}
+                      showTokens={props.resumeCompactionTokens === null}
+                      outputTokensPerSecond={props.outputTokensPerSecond}
+                    />
                     {speechInput.available ? (
                       <>
                         <ComposerSpeechRecordingPill

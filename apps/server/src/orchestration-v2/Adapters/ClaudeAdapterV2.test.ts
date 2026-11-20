@@ -410,7 +410,7 @@ describe("ClaudeAdapterV2 runtime query policy", () => {
         rootThreadId: ThreadId.make("thread-root"),
       },
     });
-    const env = { PATH: "/bin" };
+    const env = { PATH: "/bin", CLAUDE_CODE_ENABLE_TODO_TOOLS: "1" };
     const ttl = (environment: NodeJS.ProcessEnv, ...args: Parameters<typeof lineage>) =>
       ClaudeAdapterV2.claudeQueryEnvironment(environment, lineage(...args), "5m")
         .CLAUDE_CODE_PROMPT_CACHE_TTL;
@@ -438,6 +438,21 @@ describe("ClaudeAdapterV2 runtime query policy", () => {
     assert.equal(nonblocking({}, true), "0");
     assert.isUndefined(nonblocking({}, false));
     assert.equal(nonblocking({ MCP_CONNECTION_NONBLOCKING: "1" }, true), "1");
+  });
+
+  it("turns on Claude's task tools unless the instance sets them", () => {
+    const appThread = {
+      lineage: {
+        parentThreadId: null,
+        relationshipToParent: null,
+        rootThreadId: ThreadId.make("t"),
+      },
+    };
+    const todoTools = (environment: NodeJS.ProcessEnv) =>
+      ClaudeAdapterV2.claudeQueryEnvironment(environment, appThread, undefined)
+        .CLAUDE_CODE_ENABLE_TODO_TOOLS;
+    assert.equal(todoTools({}), "1");
+    assert.equal(todoTools({ CLAUDE_CODE_ENABLE_TODO_TOOLS: "0" }), "0");
   });
 
   it("pins Claude's auto tool search on through flag settings", () => {

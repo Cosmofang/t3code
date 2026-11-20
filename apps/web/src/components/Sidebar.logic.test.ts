@@ -27,6 +27,7 @@ import {
   sortInboxThreadsByReturn,
   resolveSidebarDropTarget,
   planSidebarThreadDrop,
+  planThreadFolderMemberMove,
   resolveSidebarReorderableThreadKeys,
   sortPinnedThreadsForSidebar,
   sortScopedProjectsForSidebar,
@@ -1692,6 +1693,69 @@ describe("resolveSidebarFolderDot", () => {
   });
 });
 
+describe("planThreadFolderMemberMove", () => {
+  const rows = (keys: Record<string, string | null>) =>
+    Object.entries(keys).map(([id, key], index) => ({
+      id,
+      createdAt: `2026-01-0${index + 1}T00:00:00.000Z`,
+      activeOrderKey: key,
+      pinOrderKey: key,
+    }));
+  const move = (
+    threads: ReturnType<typeof rows>,
+    sort: (threads: ReturnType<typeof rows>) => ReturnType<typeof rows>,
+    movedKey: string,
+    index: number,
+    writable: ReadonlySet<string> = new Set(threads.map((thread) => thread.id)),
+  ) => {
+    const groupKeys = sort(threads).map((thread) => thread.id);
+    const plan = planThreadFolderMemberMove({
+      groupKeys,
+      movedKey,
+      index,
+      keysById: new Map(threads.map((thread) => [thread.id, thread.activeOrderKey])),
+      writable,
+    });
+    if (plan === null) return null;
+    const assigned = new Map(plan.assignments.map(({ id, orderKey }) => [id, orderKey]));
+    const next = threads.map((thread) => {
+      const key = assigned.get(thread.id) ?? thread.activeOrderKey;
+      return { ...thread, activeOrderKey: key, pinOrderKey: key };
+    });
+    return { order: sort(next).map((thread) => thread.id), mark: plan.mark };
+  };
+
+  it("moves an active member and the shared sort keeps it there", () => {
+    // Keyless rows show newest first, and keyless rows lead keyed ones.
+    const threads = rows({ a: null, b: null, c: null });
+    expect(move(threads, sortActiveThreadsByOrderKey, "a", 0)).toEqual({
+      order: ["a", "c", "b"],
+      mark: { key: "c", side: "before" },
+    });
+    expect(move(threads, sortActiveThreadsByOrderKey, "c", 3)).toEqual({
+      order: ["b", "a", "c"],
+      mark: { key: "a", side: "after" },
+    });
+    const keyed = rows({ a: null, b: "a1", c: "a2" });
+    expect(move(keyed, sortActiveThreadsByOrderKey, "a", 2)?.order).toEqual(["b", "a", "c"]);
+    expect(move(keyed, sortActiveThreadsByOrderKey, "c", 0)?.order).toEqual(["c", "a", "b"]);
+  });
+
+  it("moves a pinned member among pinned members", () => {
+    // Keyed pinned rows lead keyless ones.
+    const threads = rows({ a: null, b: "a1", c: null });
+    expect(move(threads, sortPinnedThreadsByOrderKey, "c", 0)?.order).toEqual(["c", "b", "a"]);
+    expect(move(threads, sortPinnedThreadsByOrderKey, "b", 3)?.order).toEqual(["c", "a", "b"]);
+  });
+
+  it("does nothing for a drop in place or a member it cannot write", () => {
+    const threads = rows({ a: null, b: null, c: null });
+    expect(move(threads, sortActiveThreadsByOrderKey, "b", 1)).toBeNull();
+    expect(move(threads, sortActiveThreadsByOrderKey, "b", 2)).toBeNull();
+    expect(move(threads, sortActiveThreadsByOrderKey, "a", 0, new Set(["a"]))).toBeNull();
+  });
+});
+
 describe("foldSidebarThreadFolders", () => {
   const folderKey = (id: string) => `${localEnvironmentId}:${id}`;
   const folder = (id: string, threadIds: readonly ThreadId[]) => ({
@@ -1716,7 +1780,7 @@ describe("foldSidebarThreadFolders", () => {
     collapsedKeys: new Set<string>(),
     parkedOpenKeys: new Set<string>(),
     routeThreadKey: null,
-    shelfExpanded: { working: true, snoozed: true, settled: true },
+    shelfExpanded: { snoozed: true, settled: true },
   };
 
   it("keeps a mixed folder on top, pinned first, with parked members in a footer", () => {
@@ -1789,8 +1853,16 @@ describe("foldSidebarThreadFolders", () => {
       collapsedKeys: new Set([folderKey("work")]),
       routeThreadKey: folderKey(settled.id),
     });
-    expect(collapsed.blocks[0]?.rows).toEqual([{ thread: settled, section: "settled" }]);
-    expect(collapsed.blocks[0]?.hiddenThreads).toEqual([pinned, working, active, soon, later]);
+    // A closed folder hides every member, the open thread included.
+    expect(collapsed.blocks[0]?.rows).toEqual([]);
+    expect(collapsed.blocks[0]?.hiddenThreads).toEqual([
+      pinned,
+      working,
+      active,
+      soon,
+      later,
+      settled,
+    ]);
     expect(collapsed.blocks[0]?.parked).toBeNull();
   });
 
@@ -1824,13 +1896,17 @@ describe("foldSidebarThreadFolders", () => {
     expect(oneWoken.rows).toEqual([{ thread: woken, section: "active" }]);
     expect(oneWoken.parked).toMatchObject({ snoozedCount: 1, nextWakeAt: a.snoozedUntil });
 
-    const working = foldSidebarThreadFolders({
+    // Running is no shelf: a working folder stays on top, its members in their usual rows.
+    const workingResult = foldSidebarThreadFolders({
       ...base,
       workingThreads: [a, b],
       folders: [folder("f", [a.id, b.id])],
-    }).blocks[0]!;
-    expect(working.placement).toBe("working");
+    });
+    const working = workingResult.blocks[0]!;
+    expect(working.placement).toBe("open");
+    expect(working.collapsed).toBe(false);
     expect(working.liveThreads).toEqual([a, b]);
+    expect(workingResult.workingThreads).toEqual([]);
 
     // A pinned member keeps a folder on top.
     const pinnedWorking = foldSidebarThreadFolders({
@@ -1846,9 +1922,26 @@ describe("foldSidebarThreadFolders", () => {
       ...base,
       snoozedThreads: [a, b],
       folders: [folder("f", [a.id, b.id])],
-      shelfExpanded: { working: true, snoozed: false, settled: true },
+      shelfExpanded: { snoozed: false, settled: true },
     }).blocks[0]!;
     expect(closedShelf.collapsed).toBe(true);
+    // A closed shelf still shows the open thread, unlike a folder the user closed.
+    const closedShelfRoute = {
+      ...base,
+      snoozedThreads: [a, b],
+      folders: [folder("f", [a.id, b.id])],
+      shelfExpanded: { snoozed: false, settled: true },
+      routeThreadKey: folderKey(a.id),
+    };
+    expect(foldSidebarThreadFolders(closedShelfRoute).blocks[0]?.rows).toEqual([
+      { thread: a, section: "snoozed" },
+    ]);
+    expect(
+      foldSidebarThreadFolders({
+        ...closedShelfRoute,
+        collapsedKeys: new Set([folderKey("f")]),
+      }).blocks[0]?.rows,
+    ).toEqual([]);
     const settled = foldSidebarThreadFolders({
       ...base,
       settledThreads: [a],

@@ -78,11 +78,11 @@ describe("layoutThreadFolders", () => {
 describe("resolveThreadFolderPlacement", () => {
   it("moves a folder to a shelf only when every member is on it", () => {
     expect(resolveThreadFolderPlacement([])).toBe("open");
-    expect(resolveThreadFolderPlacement(["working", "working"])).toBe("working");
+    expect(resolveThreadFolderPlacement(["active", "active"])).toBe("open");
     expect(resolveThreadFolderPlacement(["snoozed", "snoozed"])).toBe("snoozed");
     expect(resolveThreadFolderPlacement(["settled"])).toBe("settled");
     expect(resolveThreadFolderPlacement(["snoozed", "active"])).toBe("open");
-    expect(resolveThreadFolderPlacement(["working", "pinned"])).toBe("open");
+    expect(resolveThreadFolderPlacement(["active", "pinned"])).toBe("open");
     expect(resolveThreadFolderPlacement(["pinned", "pinned"])).toBe("open");
     expect(resolveThreadFolderPlacement(["settled"], { folderPinned: true })).toBe("open");
   });

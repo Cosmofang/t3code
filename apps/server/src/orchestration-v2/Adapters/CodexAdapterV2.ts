@@ -3,6 +3,7 @@ import * as DocumentText from "../../provider/DocumentText.ts";
 import { revertCodexThread } from "../../provider/CodexThreadRevert.ts";
 import { historyResponseItems } from "@t3tools/provider-core/server/handoffBudget";
 import { makeProviderTextDeltaCoalescer } from "./ProviderTextDeltaCoalescer.ts";
+import { outputTokensPerSecond } from "./outputTokenRate.ts";
 import {
   mcpToolPresentation,
   type McpToolPresentation,
@@ -1277,6 +1278,9 @@ function failureResetAt(
 }
 
 interface ActiveCodexTurnContext {
+  // Fork: output speed. A request's first streamed item starts the clock; its usage report stops it.
+  outputStartedAt?: DateTime.Utc | undefined;
+  outputTokensPerSecond?: number | undefined;
   hookStopReason?: string;
   appliedServiceTier?: string;
   capacityRetryAttempt?: number;
@@ -4990,6 +4994,14 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               return;
             }
             const now = yield* DateTime.now;
+            if (context.outputStartedAt !== undefined) {
+              context.outputTokensPerSecond =
+                outputTokensPerSecond(
+                  payload.tokenUsage.last.outputTokens,
+                  DateTime.toEpochMillis(now) - DateTime.toEpochMillis(context.outputStartedAt),
+                ) ?? context.outputTokensPerSecond;
+              context.outputStartedAt = undefined;
+            }
             yield* emitProviderEvent({
               type: "provider_turn.updated",
               driver: CODEX_PROVIDER,
@@ -5008,10 +5020,12 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                 status: "running",
                 startedAt: context.startedAt,
                 completedAt: null,
-                tokenUsage: codexProviderTurnTokenUsage(
-                  payload.tokenUsage,
-                  DateTime.formatIso(now),
-                ),
+                tokenUsage: {
+                  ...codexProviderTurnTokenUsage(payload.tokenUsage, DateTime.formatIso(now)),
+                  ...(context.outputTokensPerSecond === undefined
+                    ? {}
+                    : { outputTokensPerSecond: context.outputTokensPerSecond }),
+                },
               },
             });
           }).pipe(Effect.orDie),
@@ -5354,6 +5368,13 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
             const context = yield* awaitActiveTurn(payload.turnId);
             if (context === undefined) {
               return;
+            }
+            // Fork: only items the model streams mark when a request starts writing.
+            if (
+              context.outputStartedAt === undefined &&
+              (payload.item.type === "reasoning" || payload.item.type === "agentMessage")
+            ) {
+              context.outputStartedAt = yield* DateTime.now;
             }
 
             if (payload.item.type === "contextCompaction") {

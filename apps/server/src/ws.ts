@@ -126,6 +126,7 @@ import * as ThreadMessageIntake from "./orchestration-v2/ThreadMessageIntake.ts"
 import * as DocumentText from "./provider/DocumentText.ts";
 import * as ScheduledTasks from "./scheduledTasks/ScheduledTaskService.ts";
 import * as ThreadFolders from "./threadFolders/ThreadFolderService.ts";
+import * as ThreadSideTasks from "./threadSideTasks/ThreadSideTaskService.ts";
 import * as SecretRequests from "./secrets/SecretRequests.ts";
 import * as GuestShareService from "./guest/GuestShareService.ts";
 import {
@@ -1482,6 +1483,7 @@ export const layerWsRpc = (
       const providerSessionManager = yield* ProviderSessionManager.ProviderSessionManagerV2;
       const scheduledTasks = yield* ScheduledTasks.ScheduledTaskService;
       const threadFolders = yield* ThreadFolders.ThreadFolderService;
+      const threadSideTasks = yield* ThreadSideTasks.ThreadSideTaskService;
       const secretRequests = yield* SecretRequests.SecretRequests;
       const guestShares = yield* GuestShareService.GuestShareService;
       const pullRequests = yield* PullRequestService.PullRequestService;
@@ -2326,6 +2328,8 @@ export const layerWsRpc = (
           ),
         [WS_METHODS.threadFoldersSubscribe]: (_input) => threadFolders.subscribeList(),
         [WS_METHODS.threadFoldersMutate]: (input) => threadFolders.mutate(input),
+        [WS_METHODS.threadSideTasksSubscribe]: (_input) => threadSideTasks.subscribeList(),
+        [WS_METHODS.threadSideTasksMutate]: (input) => threadSideTasks.mutate(input),
         [ORCHESTRATION_V2_WS_METHODS.subscribePromptSuggestion]: (input) =>
           providerSessionManager.subscribePromptSuggestion(input.threadId),
         [WS_METHODS.scheduledTasksSubscribe]: (_input) =>

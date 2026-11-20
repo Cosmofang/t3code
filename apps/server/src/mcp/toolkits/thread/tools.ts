@@ -25,6 +25,10 @@ import {
   ThreadFolderId,
   ThreadFolderName,
   ThreadFolderRule,
+  ThreadSideTaskId,
+  ThreadSideTaskPrompt,
+  ThreadSideTaskReason,
+  ThreadSideTaskTitle,
   clampedPositiveInt,
 } from "@t3tools/contracts";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -34,6 +38,7 @@ import { Tool, Toolkit } from "effect/ai";
 import * as ThreadSearch from "../../../orchestration-v2/ThreadSearch.ts";
 import * as ScheduledTaskService from "../../../scheduledTasks/ScheduledTaskService.ts";
 import * as ThreadFolderService from "../../../threadFolders/ThreadFolderService.ts";
+import * as ThreadSideTaskService from "../../../threadSideTasks/ThreadSideTaskService.ts";
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 
@@ -283,6 +288,23 @@ const ThreadFolderTool = Tool.make("t3_thread_folder", {
   .annotate(Tool.Title, "Organize sidebar folders")
   .annotate(Tool.Destructive, true);
 
+const SuggestTaskTool = Tool.make("suggest_task", {
+  description:
+    "Offer the user a side task: work worth doing outside your current task, such as a bug, cleanup or follow-up you noticed. It waits in this thread's overview panel, where the user can start it in a new thread or hand it back to you. One task per call. `prompt` must stand alone for an agent that has not seen this thread: what, where, why, and how to check it. Not for steps of your current task or work the user asked you to do.",
+  parameters: Schema.Struct({
+    title: ThreadSideTaskTitle,
+    prompt: ThreadSideTaskPrompt,
+    /** Why it matters, in a sentence. */
+    reason: Schema.optional(ThreadSideTaskReason),
+  }),
+  success: Schema.Struct({ taskId: ThreadSideTaskId, pending: NonNegativeInt }),
+  failure: OrchestratorMcpFailure,
+  failureMode: "return" as const,
+  dependencies: [...commandTool.dependencies, ThreadSideTaskService.ThreadSideTaskService],
+})
+  .annotate(Tool.Title, "Suggest a side task")
+  .annotate(Tool.Destructive, false);
+
 export const ThreadToolkit = Toolkit.make(
   ScheduledTaskRunTool,
   ThreadSearchTool,
@@ -290,6 +312,7 @@ export const ThreadToolkit = Toolkit.make(
   ThreadTransferTool,
   ThreadOrganizeTool,
   ThreadFolderTool,
+  SuggestTaskTool,
   PendingRequestTool,
   QueueTool,
 );

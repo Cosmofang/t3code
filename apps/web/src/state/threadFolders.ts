@@ -28,6 +28,7 @@ import { AsyncResult, Atom } from "effect/reactivity";
 import { msg } from "gt-react";
 
 import { m } from "../i18n/messages";
+import { withDistinctFolderColors } from "../threadFolderColors";
 import { stackedThreadToast, toastManager } from "../components/ui/toast";
 import { randomUUID } from "../lib/utils";
 import { appAtomRegistry } from "../rpc/atomRegistry";
@@ -46,7 +47,9 @@ const environmentFoldersAtomFamily = Atom.family((environmentId: EnvironmentId) 
     const result = get(serverEnvironment.threadFoldersLive({ environmentId, input: {} }));
     if (!AsyncResult.isSuccess(result) || result.value === previousList) return previous;
     previousList = result.value;
-    previous = result.value.folders.map((folder) => ({ ...folder, environmentId }));
+    previous = withDistinctFolderColors(
+      result.value.folders.map((folder) => ({ ...folder, environmentId })),
+    );
     return previous;
   }).pipe(Atom.withLabel(`web-thread-folders:${environmentId}`));
 });

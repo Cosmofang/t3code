@@ -7,7 +7,6 @@ import type { SidebarThreadFolderStyle, TimestampFormat } from "@t3tools/contrac
 import {
   AlarmClockIcon,
   CheckIcon,
-  ChevronDownIcon,
   ChevronRightIcon,
   CircleDotDashedIcon,
   FolderClosedIcon,
@@ -129,7 +128,16 @@ export function threadFolderMemberClassName(
   icon: ProjectIconOverride | null,
   style: SidebarThreadFolderStyle,
 ) {
-  if (style === "cards") return threadFolderTintClassName(icon);
+  if (style === "cards") {
+    // The row sets its own text color, so the folder color reaches only the guide line.
+    return cn(
+      threadFolderTintClassName(icon),
+      "relative ps-5 before:pointer-events-none before:absolute before:inset-y-0 before:start-[15px] before:w-px before:bg-current/40",
+      icon && icon.kind !== "emoji"
+        ? projectIconColorClassName(icon.color)
+        : "text-sidebar-muted-foreground",
+    );
+  }
   // The row sets its own text color, so this color reaches only the line.
   // Rows clip paint (content-visibility), so -mt-px closes the list gap to join the lines.
   return cn(
@@ -230,7 +238,7 @@ export const SidebarThreadFolderHeader = memo(function SidebarThreadFolderHeader
   folderKey: string;
   style: SidebarThreadFolderStyle;
   /** Shelf folders: snoozed ones fade, settled ones turn grey. */
-  placement: "open" | "working" | "snoozed" | "settled";
+  placement: "open" | "snoozed" | "settled";
   collapsed: boolean;
   threads: readonly EnvironmentThreadShell[];
   hiddenThreads: readonly EnvironmentThreadShell[];
@@ -255,7 +263,7 @@ export const SidebarThreadFolderHeader = memo(function SidebarThreadFolderHeader
   onRename: (folder: EnvironmentThreadFolder, name: string) => void;
   onContextMenu: (folder: EnvironmentThreadFolder, position: { x: number; y: number }) => void;
 }) {
-  const { folder, folderKey, collapsed, threads, hiddenThreads, onToggle } = props;
+  const { folder, folderKey, collapsed, threads, onToggle } = props;
   const gt = useGT();
   const messages = useMessages();
   const canOperate = useEnvironmentScope(folder.environmentId, AuthOrchestrationOperateScope);
@@ -397,6 +405,15 @@ export const SidebarThreadFolderHeader = memo(function SidebarThreadFolderHeader
           props.onContextMenu(folder, { x: event.clientX, y: event.clientY });
         }}
       >
+        {isRenaming ? null : (
+          <ChevronRightIcon
+            aria-hidden
+            className={cn(
+              "-me-1 size-3 shrink-0 text-sidebar-muted-foreground transition-transform",
+              !collapsed && "rotate-90",
+            )}
+          />
+        )}
         <span
           className={cn(
             "flex size-5 shrink-0 items-center justify-center rounded-[25%]",
@@ -468,9 +485,9 @@ export const SidebarThreadFolderHeader = memo(function SidebarThreadFolderHeader
               {pullRequestCount}
             </span>
           ) : null}
-          {collapsed && hiddenThreads.length > 0 ? (
+          {threads.length > 0 ? (
             <span className="text-xs tabular-nums text-sidebar-muted-foreground/70">
-              {hiddenThreads.length}
+              {threads.length}
             </span>
           ) : null}
         </span>
@@ -506,15 +523,6 @@ export const SidebarThreadFolderHeader = memo(function SidebarThreadFolderHeader
             )}
           </FolderActionButton>
         )}
-        {isRenaming ? null : (
-          <ChevronDownIcon
-            aria-hidden
-            className={cn(
-              "hidden size-3 shrink-0 text-sidebar-muted-foreground transition-transform group-has-focus-visible/thread-folder:block group-hover/thread-folder:block pointer-coarse:block",
-              collapsed && "-rotate-90",
-            )}
-          />
-        )}
       </div>
     </li>
   );
@@ -540,7 +548,7 @@ export const SidebarThreadFolderEmptyRow = memo(function SidebarThreadFolderEmpt
           <T>No threads in this view</T>
         </span>
       ) : (
-        <span className="mx-(--sidebar-row-content-inset) mt-1 flex h-8 items-center justify-center rounded-md border border-dashed border-sidebar-foreground/18 text-xs text-sidebar-muted-foreground">
+        <span className="flex h-6 items-center ps-(--sidebar-row-content-inset) text-xs text-sidebar-muted-foreground/70">
           <T>Drag threads here</T>
         </span>
       )}

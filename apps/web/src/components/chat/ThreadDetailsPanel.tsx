@@ -45,6 +45,11 @@ import {
   THREAD_DETAILS_PANEL_LABEL_CLASS,
 } from "./threadDetailsPanelStyles";
 import { Menu, MenuPopup } from "../ui/menu";
+import {
+  ThreadProgressSection,
+  ThreadRelatedFilesSection,
+  ThreadSideTasksSection,
+} from "./ThreadOverviewSections";
 
 const GitActionsControl = memo(BaseGitActionsControl);
 
@@ -92,6 +97,9 @@ interface ThreadDetailsPanelProps extends Pick<
   ) => Promise<ProjectScriptActionResult>;
   onDeleteProjectScript: (scriptId: string) => Promise<ProjectScriptActionResult>;
   usage: ThreadDetailsUsageInput;
+  /** Puts a side task's prompt in the composer; false when the composer cannot take it. */
+  onInsertIntoComposer: (text: string) => boolean;
+  onOpenThread: (threadId: ThreadId) => void;
 }
 
 export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
@@ -179,9 +187,23 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
             props.activeProjectName !== undefined &&
             (visible.gitActions || (visible.changes && props.isGitRepo)),
         };
+        // A draft has no agent yet, so nothing to plan, offer, or change.
+        const overview = props.isServerThread && !props.draftId;
         return (
           <>
             <div className="group/details-items">
+              {overview && visible.progress ? (
+                <ThreadProgressSection threadRef={activeThreadRef} />
+              ) : null}
+
+              {overview && visible.sideTasks ? (
+                <ThreadSideTasksSection
+                  threadRef={activeThreadRef}
+                  onDoItHere={props.onInsertIntoComposer}
+                  onOpenThread={props.onOpenThread}
+                />
+              ) : null}
+
               {show.environment || show.openIn || show.scripts ? (
                 <ThreadDetailsSection
                   headingId="thread-details-workspace-heading"
@@ -264,6 +286,10 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
                     ) : null}
                   </div>
                 </ThreadDetailsSection>
+              ) : null}
+
+              {overview && visible.relatedFiles ? (
+                <ThreadRelatedFilesSection threadRef={activeThreadRef} />
               ) : null}
 
               {density === "full" && !props.draftId && visible.servers ? (

@@ -1,4 +1,5 @@
 import { m } from "../i18n/messages";
+import { displayThreadTitle } from "../lib/threadTitle";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { useGT, useMessages } from "gt-react";
 import { ChildThreadApprovals } from "./chat/ChildThreadApprovals";
@@ -348,6 +349,7 @@ import {
   deriveLatestContextWindowSnapshot,
   hasDismissedResumeCompaction,
   latestProviderTurnTokenUsage,
+  latestOutputTokensPerSecond,
   shouldOfferResumeCompaction,
 } from "@t3tools/client-runtime/state/context-window";
 import {
@@ -560,6 +562,10 @@ export default function ChatView(props: ChatViewProps) {
     serverProjection,
     activeProviderThread,
   );
+  const activeOutputTokensPerSecond = latestOutputTokensPerSecond(
+    serverProjection?.providerTurns ?? [],
+    activeProviderThread,
+  );
   const serverVisibleTurnItems = useQuietThreadVisibleTurnItems(routeThreadDetailRef);
   const serverThreadHistory = useThreadHistory(routeThreadDetailRef);
   const threadHistoryControls = (() => {
@@ -669,6 +675,16 @@ export default function ChatView(props: ChatViewProps) {
     return inserted;
   };
   const citeAssistantTextStable = useStableCallback(citeAssistantText);
+  // A side task done here lands in the composer, so the user can edit it before sending.
+  const doSideTaskHereStable = useStableCallback((prompt: string) => {
+    const composer = composerRef.current;
+    if (!composer?.insertTextAtEnd(prompt, { ensureLeadingBoundary: true })) {
+      toastManager.add({ type: "warning", title: gt("The composer is not ready") });
+      return false;
+    }
+    composer.focusAtEnd();
+    return true;
+  });
   const replyToResponseStable = useStableCallback((response: ResponseContextRecord) => {
     const accepted = composerRef.current?.replyToResponse(response) ?? false;
     if (!accepted) {
@@ -3411,7 +3427,7 @@ export default function ChatView(props: ChatViewProps) {
               activeThreadEnvironmentId={activeThread.environmentId}
               activeThreadId={activeThread.id}
               isServerThread={isServerThread}
-              activeThreadTitle={activeThread.title}
+              activeThreadTitle={displayThreadTitle(activeThread.title, messages)}
               activeThreadLinkOrigin={activeThreadShell?.linkOrigin?.label ?? null}
               activeProject={activeProject ?? null}
               parentThreadLink={headerParentThreadLink}
@@ -3730,6 +3746,8 @@ export default function ChatView(props: ChatViewProps) {
                                     : composerBannerItems
                                 }
                                 resumeCompactionTokens={resumeCompactionTokens}
+                                contextWindow={pendingHandoff === null ? activeContextWindow : null}
+                                outputTokensPerSecond={activeOutputTokensPerSecond}
                                 keepFullHistory={keepFullHistory}
                                 onToggleKeepFullHistory={toggleKeepFullHistoryStable}
                                 sideChatAvailable={sideChat.available}
@@ -3985,6 +4003,8 @@ export default function ChatView(props: ChatViewProps) {
                     ? { onCheckoutPullRequestRequest: openPullRequestDialogStable }
                     : {})}
                   onComposerFocusRequest={scheduleComposerFocusStable}
+                  onInsertIntoComposer={doSideTaskHereStable}
+                  onOpenThread={onOpenRelatedThreadStable}
                   {...(isServerThread && isGitRepo
                     ? { onOpenChanges: openChangesFromThreadPanelStable }
                     : {})}

@@ -168,6 +168,8 @@ function Panel({ fixture }: { fixture: ReturnType<typeof setup> }) {
         startFromOrigin={false}
         onStartFromOriginChange={noop}
         onComposerFocusRequest={noop}
+        onInsertIntoComposer={() => false}
+        onOpenThread={noop}
         onRunProjectScript={noop}
         onAddProjectScript={scriptResult}
         onUpdateProjectScript={scriptResult}

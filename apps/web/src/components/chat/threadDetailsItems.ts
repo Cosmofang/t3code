@@ -3,6 +3,9 @@ import { msg } from "gt-react";
 
 // Ids are stored in client settings, so never rename one.
 export const THREAD_DETAILS_ITEMS = [
+  // Fork: the agent's plan and the side tasks it offered lead, as they change while it works.
+  { id: "progress", label: msg("Progress"), defaultVisible: true },
+  { id: "sideTasks", label: msg("Side tasks"), defaultVisible: true },
   { id: "environment", label: msg("Environment and worktree"), defaultVisible: true },
   { id: "openIn", label: msg("Open in editor"), defaultVisible: true },
   { id: "scripts", label: msg("Project scripts"), defaultVisible: true },
@@ -13,6 +16,7 @@ export const THREAD_DETAILS_ITEMS = [
     label: msg("Changes", { $context: "thread details item: version control changes" }),
     defaultVisible: true,
   },
+  { id: "relatedFiles", label: msg("Related files"), defaultVisible: true },
   {
     id: "servers",
     label: msg("Servers", { $context: "thread details item: running dev servers" }),

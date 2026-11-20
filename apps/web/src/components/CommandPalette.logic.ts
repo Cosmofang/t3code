@@ -35,6 +35,7 @@ import { isShownUnderParent } from "@t3tools/client-runtime/state/threads";
 import { type ReactNode } from "react";
 import { msg } from "gt-react";
 import { m, type MessageResolver } from "../i18n/messages";
+import { displayThreadTitle } from "../lib/threadTitle";
 import { formatRelativeTimeLabel } from "../timestampFormat";
 import { type Project, type SidebarThreadSummary, type Thread } from "../types";
 
@@ -55,7 +56,7 @@ export function buildLinkedThreadActionItems(
     kind: "action",
     value: `thread:${input.environmentId}:${thread.id}`,
     threadRef: { environmentId: input.environmentId, threadId: thread.id },
-    title: thread.title || resolve(msg("Untitled thread")),
+    title: displayThreadTitle(thread.title, resolve) || resolve(msg("Untitled thread")),
     description:
       thread.archivedAt === null ? resolve(msg("Linked thread")) : resolve(msg("Archived thread")),
     searchTerms: [input.query, thread.title],
@@ -495,7 +496,7 @@ export function buildThreadActionItems<TThread extends BuildThreadActionItemsThr
         kind: "action" as const,
         value: `thread:${thread.environmentId}:${thread.id}`,
         threadRef: { environmentId: thread.environmentId, threadId: thread.id },
-        searchTerms: [thread.title],
+        searchTerms: [thread.title, displayThreadTitle(thread.title, resolve)],
         threadSearch: threadSearchSubject(
           {
             ...thread,
@@ -505,7 +506,7 @@ export function buildThreadActionItems<TThread extends BuildThreadActionItemsThr
           projectTitle,
           input.environmentLabelOf?.(thread),
         ),
-        title: thread.title,
+        title: displayThreadTitle(thread.title, resolve),
         description,
         timestamp: formatRelativeTimeLabel(
           thread.latestUserMessageAt ?? thread.updatedAt ?? thread.createdAt,

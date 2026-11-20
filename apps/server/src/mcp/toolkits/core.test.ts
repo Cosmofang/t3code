@@ -58,6 +58,7 @@ import * as SecretRequests from "../../secrets/SecretRequests.ts";
 import * as RemoteDelegation from "../../peer/RemoteDelegation.ts";
 import * as ScheduledTaskService from "../../scheduledTasks/ScheduledTaskService.ts";
 import * as ThreadFolderService from "../../threadFolders/ThreadFolderService.ts";
+import * as ThreadSideTaskService from "../../threadSideTasks/ThreadSideTaskService.ts";
 import * as ServerSettings from "../../serverSettings.ts";
 import * as McpHttpServer from "../McpHttpServer.ts";
 import * as McpInvocationContext from "../McpInvocationContext.ts";
@@ -92,6 +93,7 @@ const layerThreadToolkit = McpHttpServer.layerThreadToolkit.pipe(
   Layer.provide(Layer.mock(ThreadSearch.ThreadSearch)({})),
   Layer.provide(Layer.mock(ScheduledTaskService.ScheduledTaskService)({})),
   Layer.provide(Layer.mock(ThreadFolderService.ThreadFolderService)({})),
+  Layer.provide(Layer.mock(ThreadSideTaskService.ThreadSideTaskService)({})),
   Layer.provide(Layer.mock(PeerForwarding.PeerForwarding)({})),
   Layer.provide(Layer.mock(PeerLinkRequests.PeerLinkRequests)({})),
   Layer.provide(Layer.mock(PeerLinks.PeerLinks)({})),
@@ -239,6 +241,7 @@ it.effect("files this thread into a folder, needs a target, and refuses read-onl
         Layer.provide(Layer.mock(PeerForwarding.PeerForwarding)({})),
         Layer.provide(Layer.mock(PeerLinkRequests.PeerLinkRequests)({})),
         Layer.provide(Layer.mock(PeerLinks.PeerLinks)({})),
+        Layer.provide(Layer.mock(ThreadSideTaskService.ThreadSideTaskService)({})),
         Layer.provide(
           Layer.mock(ThreadFolderService.ThreadFolderService)({
             list: () => Effect.succeed({ folders: [] }),
@@ -986,6 +989,7 @@ it.effect("search names the calling thread, so an agent can tell its own match a
         Layer.provideMerge(McpHttpServer.layerInProcessMcpServer),
         Layer.provide(NodeCrypto.layer),
         Layer.provide(Layer.mock(ThreadFolderService.ThreadFolderService)({})),
+        Layer.provide(Layer.mock(ThreadSideTaskService.ThreadSideTaskService)({})),
         Layer.provide(McpToolAccessTestkit.liveThreadsLayer),
         Layer.provide(
           Layer.mock(ThreadSearch.ThreadSearch)({
@@ -1230,6 +1234,7 @@ it.effect.each([
         Layer.provide(Layer.mock(ThreadManagement.ThreadManagementService)({})),
         Layer.provide(Layer.mock(ThreadSearch.ThreadSearch)({})),
         Layer.provide(Layer.mock(ThreadFolderService.ThreadFolderService)({})),
+        Layer.provide(Layer.mock(ThreadSideTaskService.ThreadSideTaskService)({})),
         Layer.provide(Layer.mock(PeerForwarding.PeerForwarding)({})),
         Layer.provide(Layer.mock(PeerLinkRequests.PeerLinkRequests)({})),
         Layer.provide(Layer.mock(PeerLinks.PeerLinks)({})),
@@ -1270,6 +1275,7 @@ it.effect("run_scheduled_task_now reports why a started run failed to dispatch",
         Layer.provide(Layer.mock(ThreadManagement.ThreadManagementService)({})),
         Layer.provide(Layer.mock(ThreadSearch.ThreadSearch)({})),
         Layer.provide(Layer.mock(ThreadFolderService.ThreadFolderService)({})),
+        Layer.provide(Layer.mock(ThreadSideTaskService.ThreadSideTaskService)({})),
         Layer.provide(Layer.mock(PeerForwarding.PeerForwarding)({})),
         Layer.provide(Layer.mock(PeerLinkRequests.PeerLinkRequests)({})),
         Layer.provide(Layer.mock(PeerLinks.PeerLinks)({})),

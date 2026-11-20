@@ -84,6 +84,7 @@ import { formatRelativeTime, parseTimestampDate } from "../../timestampFormat";
 import type { SidebarThreadSummary } from "../../types";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { cn } from "~/lib/utils";
+import { displayThreadTitle } from "~/lib/threadTitle";
 import { textDirection } from "~/textDirection";
 import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
 import {
@@ -291,7 +292,7 @@ function SidebarThreadTooltip({
   return (
     <ThreadHoverCardPopup side="right" align="start" sideOffset={4}>
       <ThreadHoverCard
-        title={thread.title}
+        title={displayThreadTitle(thread.title, m)}
         footer={
           supportsMultiplePullRequests && thread.pullRequests.length > 0 ? (
             <div className="border-t border-border/60 pt-2 pl-0.5 text-xs text-muted-foreground">
@@ -590,6 +591,8 @@ type SidebarThreadRowProps = {
   folderCardEnd?: boolean | undefined;
   /** The thread folder whose card this row closes; the row is part of that folder's drop zone. */
   folderDropKey?: string | undefined;
+  /** Fork: a folder member dragged inside its folder lands on this side of the row. */
+  reorderMark?: "before" | "after" | null | undefined;
   dropVerb: SidebarDropVerb | null;
   dragOverPinned: boolean;
   sweepAction: SidebarSweepAction | null;
@@ -911,7 +914,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       readEnvironmentScope(threadRef.environmentId, AuthOrchestrationOperateScope)
     ) {
       event.preventDefault();
-      onStartRename(threadRef, thread.title);
+      onStartRename(threadRef, displayThreadTitle(thread.title, messages));
       return;
     }
     if (event.key !== "Enter" && event.key !== " ") return;
@@ -931,7 +934,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     }
     if ((event.target as HTMLElement).closest("button, a, input")) return;
     event.preventDefault();
-    onStartRename(threadRef, thread.title);
+    onStartRename(threadRef, displayThreadTitle(thread.title, messages));
   };
   const [isFileDragOver, setIsFileDragOver] = useState(false);
   const fileDropHandlers = onFileDropThreads
@@ -1071,8 +1074,9 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       </span>
     ) : null;
 
+  const displayTitle = displayThreadTitle(thread.title, messages);
   const accessibility = resolveSidebarRowAccessibility({
-    title: thread.title,
+    title: displayTitle,
     statusLabel: topStatus?.label ?? null,
     projectDisplayName: props.projectDisplayName,
     isActive: props.isActive,
@@ -1113,11 +1117,11 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                       : "text-secondary-label/70",
               ),
       )}
-      dir={textDirection(thread.title)}
+      dir={textDirection(displayTitle)}
     >
-      {thread.title}
+      {displayTitle}
       {isRegeneratingTitle ? (
-        <ActivityShimmerOverlay className="truncate">{thread.title}</ActivityShimmerOverlay>
+        <ActivityShimmerOverlay className="truncate">{displayTitle}</ActivityShimmerOverlay>
       ) : null}
     </span>
   );
@@ -1212,6 +1216,34 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       </span>
     ) : null;
   const diff = latestRunDiff(thread);
+  // Fork: a list row leads with its AI's icon where the project icon was, so the trailing
+  // provider icons would repeat it.
+  const leadingSlotShown =
+    variant !== "card" &&
+    !(
+      (variant === "folder" || variant === "folder-multiline") &&
+      props.folderTintClassName === undefined
+    );
+  const leadingProviderIcon =
+    leadingSlotShown && providerEntry !== null ? (
+      <ProviderInstanceIcon
+        driverKind={providerEntry.driverKind}
+        displayName={providerEntry.displayName}
+        accentColor={providerEntry.accentColor}
+        acpRegistryAgentId={providerEntry.acpRegistryAgentId}
+        acpRegistryIconUrl={providerEntry.acpRegistryIconUrl}
+        showBadge={showInstanceBadge}
+        size="compact"
+        iconClassName="size-4"
+      />
+    ) : null;
+  const trailingProviderStack =
+    leadingProviderIcon === null ? (
+      <SidebarProviderStack
+        thread={thread}
+        providerEntryByInstanceId={props.providerEntryByInstanceId}
+      />
+    ) : null;
   // Only the trailing icons would remain, so the row moves them to the title line instead.
   const metaLineEmpty =
     !checkoutThread.branch &&
@@ -1253,20 +1285,14 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         className="pointer-events-none ml-auto inline-flex shrink-0 items-center gap-1"
       >
         {remoteMachineIcon}
-        <SidebarProviderStack
-          thread={thread}
-          providerEntryByInstanceId={props.providerEntryByInstanceId}
-        />
+        {trailingProviderStack}
       </span>
     </div>
   );
   const titleLineIcons = metaLineEmpty ? (
     <span aria-hidden className="inline-flex shrink-0 items-center gap-1">
       {remoteMachineIcon}
-      <SidebarProviderStack
-        thread={thread}
-        providerEntryByInstanceId={props.providerEntryByInstanceId}
-      />
+      {trailingProviderStack}
     </span>
   ) : null;
 
@@ -1284,8 +1310,19 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
           metaLine !== null && multiline && "[contain-intrinsic-size:auto_--spacing(13.5)]",
           folderCardClassName,
           sortable?.isDragging && "relative z-20",
+          props.reorderMark != null && "relative",
         )}
       >
+        {/* Inside the row: content-visibility clips anything drawn past its edge. */}
+        {props.reorderMark != null ? (
+          <span
+            aria-hidden
+            className={cn(
+              "pointer-events-none absolute inset-x-1 z-10 h-0.5 rounded-full bg-primary",
+              props.reorderMark === "before" ? "top-0" : "bottom-0",
+            )}
+          />
+        ) : null}
         <Tooltip disabled={isRenaming || sortable?.isDragging}>
           <TooltipTrigger
             render={
@@ -1305,7 +1342,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                     ? "flex flex-col justify-center px-2.5 py-1.5"
                     : "flex h-9 items-center gap-2.5 px-2.5",
                   // Lines titles up with the folder name, past its chevron and icon.
-                  inFolder && "ps-9",
+                  inFolder && props.folderTintClassName === undefined && "ps-9",
                 )}
                 onClick={handleClick}
                 onDoubleClick={handleDoubleClick}
@@ -1316,7 +1353,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
           >
             {/* `contents` keeps one-line rows a single flex row. */}
             <div className={multiline ? "flex h-6 min-w-0 items-center gap-2.5" : "contents"}>
-              {inFolder ? null : (
+              {inFolder && props.folderTintClassName === undefined ? null : (
                 <span
                   className={cn(
                     "flex shrink-0 items-center transition-opacity",
@@ -1324,9 +1361,10 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                       "opacity-40 grayscale group-focus-within/sidebar-row:opacity-100 group-focus-within/sidebar-row:grayscale-0 group-hover/sidebar-row:opacity-100 group-hover/sidebar-row:grayscale-0",
                   )}
                 >
-                  {props.project ? (
-                    <ProjectFavicon project={props.project} className="size-4" />
-                  ) : null}
+                  {leadingProviderIcon ??
+                    (props.project ? (
+                      <ProjectFavicon project={props.project} className="size-4" />
+                    ) : null)}
                 </span>
               )}
               {draftIndicator}
@@ -1732,8 +1770,9 @@ export const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props
   const messages = useMessages();
   const thread =
     useThreadShell(scopeThreadRef(props.thread.environmentId, props.thread.id)) ?? props.thread;
+  const displayTitle = displayThreadTitle(thread.title, messages);
   const accessibility = resolveSidebarRowAccessibility({
-    title: thread.title,
+    title: displayTitle,
     statusLabel: null,
     projectDisplayName: props.projectDisplayName,
     isActive: props.isRouteActive,
@@ -1868,10 +1907,10 @@ export const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props
                       : "text-foreground",
                 )}
               >
-                {thread.title}
+                {displayTitle}
                 {isRegeneratingTitle ? (
                   <ActivityShimmerOverlay className="truncate">
-                    {thread.title}
+                    {displayTitle}
                   </ActivityShimmerOverlay>
                 ) : null}
               </span>

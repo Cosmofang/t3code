@@ -104,10 +104,11 @@ which refuses skills reserved for manual invocation.
 
 ## Task lists
 
-To show Claude task lists in the web and desktop apps, add
-`CLAUDE_CODE_ENABLE_TODO_TOOLS=1` under **Variables** in the Claude instance's
-**Environment** section in **Settings > Providers**. Each update shows as a Tasks
-row in the thread; open it to see every step.
+Claude threads get Claude Code's task tools, so their task lists show in the web
+and desktop apps. To turn the tools off, add `CLAUDE_CODE_ENABLE_TODO_TOOLS=0`
+under **Variables** in the Claude instance's **Environment** section in
+**Settings > Providers**. Each update shows as a Tasks row in the thread; open it
+to see every step, or follow it in the thread details card's Progress section.
 
 ## Claude in Chrome
 

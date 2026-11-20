@@ -36,6 +36,7 @@ import {
   type ClaudeModelLedger,
 } from "../../provider/ClaudeTurnTokenUsage.ts";
 import { toMcpElicitationResponse } from "../../provider/CodexMcpElicitation.ts";
+import { outputTokensPerSecond } from "./outputTokenRate.ts";
 import {
   type CanUseTool,
   type ElicitationRequest,
@@ -2100,13 +2101,17 @@ export function claudeQueryEnvironment(
       ? subagentPromptCacheTtl
       : undefined;
   const blockingMcpConnect = resume && environment.MCP_CONNECTION_NONBLOCKING === undefined;
-  if (promptCacheTtl === undefined && !blockingMcpConnect) {
+  // Fork: Claude Code withholds its task tools from newer models unless asked, which leaves the
+  // thread's Progress section empty. An instance value, such as 0, still wins.
+  const todoTools = environment.CLAUDE_CODE_ENABLE_TODO_TOOLS === undefined;
+  if (promptCacheTtl === undefined && !blockingMcpConnect && !todoTools) {
     return environment;
   }
   return {
     ...environment,
     ...(promptCacheTtl === undefined ? {} : { CLAUDE_CODE_PROMPT_CACHE_TTL: promptCacheTtl }),
     ...(blockingMcpConnect ? { MCP_CONNECTION_NONBLOCKING: "0" } : {}),
+    ...(todoTools ? { CLAUDE_CODE_ENABLE_TODO_TOOLS: "1" } : {}),
   };
 }
 
@@ -5044,8 +5049,11 @@ interface ActiveClaudeTurnContext {
   streamUsage: {
     readonly messageId: string;
     requestedAt?: DateTime.Utc;
+    // Fork: the first content block, which starts the output speed's clock.
+    firstOutputAt?: DateTime.Utc;
     usage: ClaudeMessageUsage | null;
   } | null;
+  outputTokensPerSecond: number | undefined;
   compactionTokens: number | undefined;
   readonly toolCalls: Map<string, ActiveClaudeToolCall>;
   // A successful status can precede the boundary that supplies its token counts.
@@ -6341,27 +6349,44 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           context: ActiveClaudeTurnContext,
           usage: ClaudeMessageUsage | number,
           requestStarted = false,
+          generationEnded = false,
         ) {
           const now = yield* DateTime.now;
           // Only message_start marks the request start; an assistant snapshot
           // arrives after generation, so it leaves the cache expiry unknown.
           if (requestStarted && context.streamUsage !== null) context.streamUsage.requestedAt = now;
+          const firstOutputAt = context.streamUsage?.firstOutputAt;
+          if (generationEnded && typeof usage !== "number" && firstOutputAt !== undefined) {
+            context.outputTokensPerSecond =
+              outputTokensPerSecond(
+                usage.output_tokens,
+                DateTime.toEpochMillis(now) - DateTime.toEpochMillis(firstOutputAt),
+              ) ?? context.outputTokensPerSecond;
+          }
           const maxTokens = claudeContextWindow(context.input.modelSelection);
+          const tokenSpeed =
+            context.outputTokensPerSecond === undefined
+              ? {}
+              : { outputTokensPerSecond: context.outputTokensPerSecond };
           const tokenUsage =
             typeof usage === "number"
               ? {
                   usedTokens: usage,
                   maxTokens,
                   ...claudeAutoCompactThreshold(context.autoCompactWindow, maxTokens),
+                  ...tokenSpeed,
                   updatedAt: DateTime.formatIso(now),
                 }
-              : claudeProviderTurnTokenUsage(
-                  usage,
-                  maxTokens,
-                  DateTime.formatIso(now),
-                  context.autoCompactWindow,
-                  context.streamUsage?.requestedAt,
-                );
+              : {
+                  ...claudeProviderTurnTokenUsage(
+                    usage,
+                    maxTokens,
+                    DateTime.formatIso(now),
+                    context.autoCompactWindow,
+                    context.streamUsage?.requestedAt,
+                  ),
+                  ...tokenSpeed,
+                };
           if (typeof usage !== "number") {
             if (claudeMessageInputTokens(usage) <= 0) return;
             context.compactionTokens = undefined;
@@ -10704,6 +10729,14 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
 
           if (message.type === "stream_event" && !message.parent_tool_use_id) {
             const event = message.event;
+            // Fork: thinking may stream nothing, but its block opens as output begins.
+            if (
+              event.type === "content_block_start" &&
+              context.streamUsage !== null &&
+              context.streamUsage.firstOutputAt === undefined
+            ) {
+              context.streamUsage.firstOutputAt = yield* DateTime.now;
+            }
             const reasoning = context.reasoning;
             if (event.type === "message_start") {
               reasoning.messageId = event.message.id;
@@ -10718,7 +10751,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               const stream = context.streamUsage;
               if (stream?.usage && usage !== undefined) {
                 stream.usage = mergeClaudeStreamUsage(stream.usage, usage);
-                yield* emitContextUsage(context, stream.usage);
+                yield* emitContextUsage(context, stream.usage, false, true);
               }
             } else if (
               event.type === "content_block_start" &&
@@ -13295,6 +13328,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 blocks: new Map(),
               },
               streamUsage: null,
+              outputTokensPerSecond: undefined,
               compactionTokens: undefined,
               toolCalls: new Map(),
               compaction: null,

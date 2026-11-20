@@ -76,6 +76,25 @@ export function latestProviderTurnTokenUsage(
   );
 }
 
+/**
+ * Fork: the newest output speed on the active provider thread. A new turn reports usage before it
+ * times a request, so the speed comes from the newest report that has one.
+ */
+export function latestOutputTokensPerSecond(
+  turns: ReadonlyArray<Pick<OrchestrationV2ProviderTurn, "providerThreadId" | "tokenUsage">>,
+  providerThread?: Pick<OrchestrationV2ProviderThread, "id"> | null,
+): number | null {
+  let latest: OrchestrationV2ProviderTurnTokenUsage | null = null;
+  for (const { providerThreadId, tokenUsage } of turns) {
+    if (tokenUsage?.outputTokensPerSecond === undefined) continue;
+    if (providerThread != null && providerThreadId !== providerThread.id) continue;
+    if (latest === null || Date.parse(tokenUsage.updatedAt) >= Date.parse(latest.updatedAt)) {
+      latest = tokenUsage;
+    }
+  }
+  return latest?.outputTokensPerSecond ?? null;
+}
+
 export function deriveLatestContextWindowSnapshot(
   entries: ReadonlyArray<{
     readonly item: ThreadStructureTurnItem;

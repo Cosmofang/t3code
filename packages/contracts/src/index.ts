@@ -67,6 +67,7 @@ export * from "./previewCapture.ts";
 export * from "./usage.ts";
 export * from "./scheduledTask.ts";
 export * from "./threadFolder.ts";
+export * from "./threadSideTask.ts";
 export * from "./worktreeMcp.ts";
 export * from "./resourceTelemetry.ts";
 export * from "./rpc.ts";

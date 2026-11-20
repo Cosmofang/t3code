@@ -1578,6 +1578,10 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:server:thread-folders:live",
       tag: WS_METHODS.threadFoldersSubscribe,
     }),
+    threadSideTasksLive: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+      label: "environment-data:server:thread-side-tasks:live",
+      tag: WS_METHODS.threadSideTasksSubscribe,
+    }),
     scheduledTasksLive: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
       label: "environment-data:server:scheduled-tasks:live",
       tag: WS_METHODS.scheduledTasksSubscribe,
@@ -1847,6 +1851,11 @@ export function createServerEnvironmentAtoms<R, E>(
     mutateThreadFolders: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:thread-folders:mutate",
       tag: WS_METHODS.threadFoldersMutate,
+      concurrency: configConcurrency,
+    }),
+    mutateThreadSideTasks: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:thread-side-tasks:mutate",
+      tag: WS_METHODS.threadSideTasksMutate,
       concurrency: configConcurrency,
     }),
     upsertScheduledTask: createEnvironmentRpcCommand(runtime, {

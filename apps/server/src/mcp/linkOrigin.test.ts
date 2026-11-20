@@ -37,6 +37,7 @@ import * as ProjectService from "../project/ProjectService.ts";
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import * as ScheduledTaskService from "../scheduledTasks/ScheduledTaskService.ts";
 import * as ThreadFolderService from "../threadFolders/ThreadFolderService.ts";
+import * as ThreadSideTaskService from "../threadSideTasks/ThreadSideTaskService.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as CommandReceiptStore from "../orchestration-v2/CommandReceiptStore.ts";
 import * as SecretRequests from "../secrets/SecretRequests.ts";
@@ -136,6 +137,7 @@ const layerTools = Layer.mergeAll(
     Layer.mergeAll(
       Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
       Layer.mock(ThreadFolderService.ThreadFolderService)({}),
+      Layer.mock(ThreadSideTaskService.ThreadSideTaskService)({}),
     ),
   ),
   Layer.provide(

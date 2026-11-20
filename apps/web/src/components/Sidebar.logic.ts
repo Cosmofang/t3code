@@ -77,10 +77,9 @@ function earliestSnoozeWake(threads: readonly EnvironmentThreadShell[]): string 
 }
 
 /**
- * Folders own every member, whatever its shelf. A folder whose members all share a shelf
- * moves to that shelf; any other folder stays on top, pinned rows first, then live rows by
- * order key. There its snoozed and settled members fold into a footer until it is opened.
- * A collapsed folder still shows the open thread.
+ * Folders own every member. An all-snoozed or all-settled folder moves to that shelf; any other,
+ * a working one too, stays on top with snoozed and settled members in a footer.
+ * A collapsed folder hides every member; a closed shelf still shows the open thread.
  */
 export function foldSidebarThreadFolders<T extends EnvironmentThreadShell>(input: {
   readonly pinnedThreads: readonly T[];
@@ -95,12 +94,10 @@ export function foldSidebarThreadFolders<T extends EnvironmentThreadShell>(input
   readonly routeThreadKey: string | null;
   /** A closed shelf folds its folders away, like a collapsed folder. */
   readonly shelfExpanded: {
-    readonly working: boolean;
     readonly snoozed: boolean;
     readonly settled: boolean;
   };
 }) {
-  const working = new Set(input.workingThreads);
   const ordered: Array<{ readonly thread: T; readonly section: SidebarFolderSection }> = [
     ...input.pinnedThreads.map((thread) => ({ thread, section: "pinned" as const })),
     ...sortActiveThreadsByOrderKey([...input.workingThreads, ...input.activeThreads]).map(
@@ -125,7 +122,7 @@ export function foldSidebarThreadFolders<T extends EnvironmentThreadShell>(input
     blocks: layout.blocks.map((block) => {
       const all = block.threads.map((thread) => ({ thread, section: sectionOf.get(thread)! }));
       const placement = resolveThreadFolderPlacement(
-        all.map((row) => (working.has(row.thread) ? "working" : row.section)),
+        all.map((row) => row.section),
         { folderPinned: block.folder.pinnedAt != null },
       );
       const parked = all.filter((row) => row.section === "snoozed" || row.section === "settled");
@@ -135,10 +132,13 @@ export function foldSidebarThreadFolders<T extends EnvironmentThreadShell>(input
       const rows = parkedFolded ? all.filter((row) => !parked.includes(row)) : all;
       // Settled folders start collapsed, so a stored key flips each folder from its default.
       const settled = placement === "settled";
+      const folderCollapsed = input.collapsedKeys.has(block.key) !== settled;
       const collapsed =
-        input.collapsedKeys.has(block.key) !== settled ||
-        (placement !== "open" && !input.shelfExpanded[placement]);
-      const hidden = collapsed ? all.filter((row) => !isRoute(row.thread)) : [];
+        folderCollapsed || (placement !== "open" && !input.shelfExpanded[placement]);
+      // Fork: a folder the user closed hides every member; only a closed shelf keeps the open
+      // thread in view.
+      const keptRows = folderCollapsed ? [] : all.filter((row) => isRoute(row.thread));
+      const hidden = collapsed ? all.filter((row) => !keptRows.includes(row)) : [];
       const snoozed = parked.filter((row) => row.section === "snoozed").map((row) => row.thread);
       return {
         ...block,
@@ -147,7 +147,7 @@ export function foldSidebarThreadFolders<T extends EnvironmentThreadShell>(input
         settled,
         // Every member settled, wherever the folder shows (a pinned one stays on top).
         allSettled: all.length > 0 && all.every((row) => row.section === "settled"),
-        rows: collapsed ? all.filter((row) => isRoute(row.thread)) : rows,
+        rows: collapsed ? keptRows : rows,
         hiddenThreads: hidden.map((row) => row.thread),
         // The header tally counts live members only; parked ones never light it.
         liveThreads: all
@@ -166,6 +166,41 @@ export function foldSidebarThreadFolders<T extends EnvironmentThreadShell>(input
         nextWakeAt: placement === "snoozed" ? earliestSnoozeWake(snoozed) : null,
       };
     }),
+  };
+}
+
+/**
+ * Fork: a member dragged inside its own folder moves among the members it sorts with (pinned or
+ * active) through the order keys the main list uses. Null when the drop would not move it.
+ */
+export function planThreadFolderMemberMove(input: {
+  readonly groupKeys: readonly string[];
+  readonly movedKey: string;
+  /** The landing slot among `groupKeys` as shown, the moved row still counted. */
+  readonly index: number;
+  readonly keysById: ReadonlyMap<string, string | null | undefined>;
+  readonly writable: ReadonlySet<string>;
+}) {
+  const { groupKeys, movedKey, index } = input;
+  const from = groupKeys.indexOf(movedKey);
+  const to = index > from ? index - 1 : index;
+  if (from === -1 || to === from) return null;
+  const order = groupKeys.filter((key) => key !== movedKey);
+  order.splice(to, 0, movedKey);
+  const assignments = planPinnedReorder({
+    orderedIds: order,
+    keysById: input.keysById,
+    movedId: movedKey,
+  });
+  if (assignments.length === 0 || assignments.some(({ id }) => !input.writable.has(id))) {
+    return null;
+  }
+  return {
+    assignments,
+    mark:
+      index < groupKeys.length
+        ? { key: groupKeys[index]!, side: "before" as const }
+        : { key: groupKeys.at(-1)!, side: "after" as const },
   };
 }
 

@@ -37,6 +37,7 @@ import {
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { msg, T, useGT, useMessages } from "gt-react";
 import { m } from "../i18n/messages";
+import { displayThreadTitle } from "../lib/threadTitle";
 import { attachSidebarTree } from "../lib/sidebarTree";
 import { type EnvironmentId, type ScopedProjectRef } from "@t3tools/contracts";
 import type { EnvironmentServerConfig } from "@t3tools/client-runtime/connection";
@@ -234,6 +235,7 @@ import {
   isTrailingDoubleClick,
   orderItemsByPreferredIds,
   planSidebarThreadDrop,
+  planThreadFolderMemberMove,
   reduceSidebarProjectScopeMenuState,
   resolveAdjacentThreadId,
   resolveSidebarSweepKeys,
@@ -569,7 +571,6 @@ function useSidebarThreads(input: {
     parkedOpenKeys: new Set(parkedOpenFolderKeys),
     routeThreadKey: routeRowThreadKey,
     shelfExpanded: {
-      working: workingShelfExpanded,
       snoozed: snoozedShelfExpanded,
       settled: settledShelfExpanded,
     },
@@ -582,12 +583,12 @@ function useSidebarThreads(input: {
   });
   const listedSettledThreads = settledThreads.filter(olderSettledShelf.isListed);
   useOlderSettledShelfGrowth(olderSettledShelf, listedSettledThreads);
-  const shelfFolderThreadCount = (placement: "working" | "snoozed" | "settled") =>
+  const shelfFolderThreadCount = (placement: "snoozed" | "settled") =>
     threadFolderBlocks
       .filter((block) => block.placement === placement)
       .reduce((total, block) => total + block.threads.length, 0);
   const settledFolderThreadCount = shelfFolderThreadCount("settled");
-  const workingCount = workingThreads.length + shelfFolderThreadCount("working");
+  const workingCount = workingThreads.length;
   const snoozedCount = snoozedThreads.length + shelfFolderThreadCount("snoozed");
   const settledCount =
     settledThreads.length +
@@ -637,7 +638,7 @@ function useSidebarThreads(input: {
         });
   const folderRows = threadFolderBlocks.flatMap((block) => block.rows);
   // Keyboard order follows the screen: shelf folders sit under their shelf header.
-  const members = (placement: "open" | "working" | "snoozed" | "settled") =>
+  const members = (placement: "open" | "snoozed" | "settled") =>
     threadFolderBlocks
       .filter((block) => block.placement === placement)
       .flatMap((block) => block.rows.map((row) => row.thread));
@@ -647,7 +648,6 @@ function useSidebarThreads(input: {
     ...(projectFolders === null
       ? activeThreads
       : projectFolders.flatMap((folder) => folder.threads)),
-    ...members("working"),
     ...visibleWorkingThreads,
     ...members("snoozed"),
     ...visibleSnoozedThreads,
@@ -1186,6 +1186,16 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   // The folder card under a dragged thread, or "unfile" past the folders for a filed one.
   const [folderDropKey, setFolderDropKey] = useState<string | null>(null);
   const folderDropKeyRef = useRef<string | null>(null);
+  // Fork: where a member dragged inside its own folder would land.
+  const [folderMemberMark, setFolderMemberMark] = useState<{
+    readonly key: string;
+    readonly side: "before" | "after";
+  } | null>(null);
+  // Fork: order keys written for a folder member move, shown until the server echoes them.
+  const [folderMemberHold, setFolderMemberHold] = useState<{
+    readonly field: "pinOrderKey" | "activeOrderKey";
+    readonly keys: ReadonlyMap<string, string>;
+  } | null>(null);
   const dragScrollRef = useRef<{ readonly viewport: Element; readonly top: number } | null>(null);
   const [actionSweep, setActionSweep] = useState<{
     action: SidebarSweepAction;
@@ -1236,10 +1246,28 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         );
   const threads = useQuietThreadShells();
   const promotingDraftThreadKeys = usePromotingDraftThreadKeys();
+  if (
+    folderMemberHold !== null &&
+    threads.every((thread) => {
+      const held = folderMemberHold.keys.get(threadShellKey(thread));
+      return held === undefined || held === thread[folderMemberHold.field];
+    })
+  ) {
+    setFolderMemberHold(null);
+  }
+  const heldThreads =
+    folderMemberHold === null
+      ? threads
+      : threads.map((thread) => {
+          const orderKey = folderMemberHold.keys.get(threadShellKey(thread));
+          return orderKey === undefined
+            ? thread
+            : { ...thread, [folderMemberHold.field]: orderKey };
+        });
   const listedThreads =
     promotingDraftThreadKeys.length === 0
-      ? threads
-      : threads.map((thread) =>
+      ? heldThreads
+      : heldThreads.map((thread) =>
           promotingDraftThreadKeys.includes(threadShellKey(thread))
             ? asLaunchingThread(thread)
             : thread,
@@ -2047,6 +2075,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     contextDragKeyRef.current = null;
     folderDropKeyRef.current = null;
     setFolderDropKey(null);
+    setFolderMemberMark(null);
     dragScrollRef.current = null;
     endThreadContextDrag();
     if (started) {
@@ -2075,18 +2104,22 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     const bounds = (threadListRef.current ?? searchResultsListRef.current)?.getBoundingClientRect();
     return bounds !== undefined && (point.x < bounds.left || point.x > bounds.right);
   };
+  // The dragged row follows the pointer, so look beneath it.
+  const listRowBeneath = (point: { x: number; y: number }, key: string) => {
+    const row = document
+      .elementsFromPoint(point.x, point.y)
+      .find((element) => !element.closest(`[data-thread-item="${CSS.escape(key)}"]`))
+      ?.closest<HTMLElement>("li");
+    return row && threadListRef.current?.contains(row) ? row : null;
+  };
   const folderDropAt = (point: { x: number; y: number }): string | null => {
     const key = contextDragKeyRef.current;
     const thread = key === null ? undefined : threadByKeyRef.current.get(key);
     if (thread === undefined || !readEnvironmentSupportsThreadFolders(thread.environmentId)) {
       return null;
     }
-    // The dragged row follows the pointer, so look beneath it.
-    const row = document
-      .elementsFromPoint(point.x, point.y)
-      .find((element) => !element.closest(`[data-thread-item="${CSS.escape(key!)}"]`))
-      ?.closest<HTMLElement>("li");
-    if (!row || !threadListRef.current?.contains(row)) return null;
+    const row = listRowBeneath(point, key!);
+    if (!row) return null;
     const current = threadFolderBlocksRef.current.find((block) =>
       block.threads.some((member) => threadShellKey(member) === key),
     );
@@ -2098,6 +2131,85 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     const block = threadFolderBlocksRef.current.find((candidate) => candidate.key === hit);
     return block?.folder.environmentId === thread.environmentId && block !== current ? hit : null;
   };
+  // Fork: a member dragged inside its own folder reorders among the members it sorts with.
+  const folderMemberMoveAt = useStableCallback((point: { x: number; y: number }) => {
+    const key = contextDragKeyRef.current;
+    if (key === null) return null;
+    // A multi-row drag files or unfiles; only a single row reorders.
+    const selected = useThreadSelectionStore.getState().selectedThreadKeys;
+    if (selected.has(key) && selected.size > 1) return null;
+    const block = threadFolderBlocksRef.current.find((candidate) =>
+      candidate.rows.some((row) => threadShellKey(row.thread) === key),
+    );
+    if (block === undefined || listRowBeneath(point, key)?.dataset.threadFolderDrop !== block.key) {
+      return null;
+    }
+    const section = block.rows.find((row) => threadShellKey(row.thread) === key)!.section;
+    if (section !== "pinned" && section !== "active") return null;
+    const groupKeys = block.rows
+      .filter((row) => row.section === section)
+      .map((row) => threadShellKey(row.thread));
+    const next = groupKeys.findIndex((groupKey) => {
+      const rect = threadListRef.current
+        ?.querySelector(`li[data-thread-item="${CSS.escape(groupKey)}"]`)
+        ?.getBoundingClientRect();
+      return rect !== undefined && point.y < rect.top + rect.height / 2;
+    });
+    const plan = planThreadFolderMemberMove({
+      groupKeys,
+      movedKey: key,
+      index: next === -1 ? groupKeys.length : next,
+      keysById: section === "pinned" ? pinnedKeysById : activeKeysById,
+      writable: draggableThreadKeys,
+    });
+    return (
+      plan && {
+        ...plan,
+        field: section === "pinned" ? ("pinOrderKey" as const) : ("activeOrderKey" as const),
+      }
+    );
+  });
+  const moveThreadFolderMember = useStableCallback(
+    (plan: NonNullable<ReturnType<typeof folderMemberMoveAt>>) => {
+      const writes = plan.assignments.flatMap(({ id, orderKey }) => {
+        const threadRef = parseScopedThreadKey(id);
+        return threadRef === null ? [] : [{ threadRef, orderKey }];
+      });
+      if (!checkThreadOperations(writes.map(({ threadRef }) => threadRef))) return;
+      const hold = {
+        field: plan.field,
+        keys: new Map(plan.assignments.map(({ id, orderKey }) => [id, orderKey])),
+      };
+      setFolderMemberHold(hold);
+      const release = () => setFolderMemberHold((current) => (current === hold ? null : current));
+      void (async () => {
+        for (const { threadRef, orderKey } of writes) {
+          const result = await (
+            plan.field === "pinOrderKey" ? reorderPinnedThread : reorderActiveThread
+          )(threadRef, orderKey);
+          if (result._tag === "Success") continue;
+          release();
+          if (!isAtomCommandInterrupted(result)) {
+            toastManager.add(
+              stackedThreadToast({
+                type: "error",
+                title:
+                  plan.field === "pinOrderKey"
+                    ? gt("Failed to reorder pinned threads")
+                    : gt("Failed to reorder active threads"),
+                description:
+                  thrownErrorMessage(squashAtomCommandFailure(result), m) ??
+                  gt("An error occurred."),
+              }),
+            );
+          }
+          return;
+        }
+        // The hold drops once the keys arrive; this covers keys another client rewrote first.
+        setTimeout(release, 5000);
+      })();
+    },
+  );
   // The path out of the list often crosses dnd-kit's edge zone, which autoscrolls the sidebar.
   const restoreDragScroll = () => {
     const scroll = dragScrollRef.current;
@@ -2109,6 +2221,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       folderDropKeyRef.current = folderDrop;
       setFolderDropKey(folderDrop);
     }
+    const mark = folderDrop === null ? (folderMemberMoveAt(point)?.mark ?? null) : null;
+    setFolderMemberMark((current) =>
+      current?.key === mark?.key && current?.side === mark?.side ? current : mark,
+    );
     const key = contextDragKeyRef.current;
     // Folder members are not in the sortable list, and search results cannot reorder,
     // so both drag as a ghost from the start.
@@ -2157,6 +2273,11 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             : (threadFolderBlocksRef.current.find((block) => block.key === folderDrop)?.folder.id ??
               null),
       });
+      return true;
+    }
+    const memberMove = folderDrop === null ? folderMemberMoveAt(point) : null;
+    if (memberMove !== null) {
+      moveThreadFolderMember(memberMove);
       return true;
     }
     if (!pointerOutsideThreadList(point)) return false;
@@ -2338,7 +2459,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       folderKey: block.key,
     });
     // A shelf folder folds away with its shelf, except the one holding the open thread.
-    const shelfFolders = (placement: "working" | "snoozed" | "settled", expanded: boolean) =>
+    const shelfFolders = (placement: "snoozed" | "settled", expanded: boolean) =>
       threadFolderBlocks
         .filter((block) => block.placement === placement && (expanded || block.rows.length > 0))
         .map(folderMarker);
@@ -2354,7 +2475,6 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     items.push(...activeRows);
     if (workingCount > 0) {
       items.push({ kind: "marker", marker: "working-header" });
-      items.push(...shelfFolders("working", workingShelfExpanded));
       items.push(...rowsOf(visibleWorkingThreads, "working"));
     }
     if (snoozedCount > 0) {
@@ -3593,7 +3713,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             return;
           }
           case "rename":
-            startThreadRename(threadRef, thread.title);
+            startThreadRename(threadRef, displayThreadTitle(thread.title, m));
             return;
           case "share-guest":
             openGuestShareDialog(threadRef);
@@ -4219,13 +4339,14 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                         );
                         const isCard =
                           section === "active" || section === "pinned" || section === "working";
-                        const rowVariant = folderRow
-                          ? folderRowsMultiline
-                            ? "folder-multiline"
-                            : "folder"
-                          : isCard
-                            ? "card"
-                            : "slim";
+                        const rowVariant =
+                          folderRow || threadFolderCard
+                            ? folderRowsMultiline
+                              ? "folder-multiline"
+                              : "folder"
+                            : isCard
+                              ? "card"
+                              : "slim";
                         return (
                           <SortableThreadRow
                             key={threadKey}
@@ -4241,6 +4362,9 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                             folderTintClassName={threadFolderCard?.tintClassName}
                             folderCardEnd={threadFolderCard?.isLast}
                             folderDropKey={threadFolderCard?.dropKey}
+                            reorderMark={
+                              folderMemberMark?.key === threadKey ? folderMemberMark.side : null
+                            }
                             navigationParent={
                               threadFolderCard?.parent ??
                               folderRow ??

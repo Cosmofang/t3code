@@ -61,6 +61,7 @@ import { environmentShell } from "./state/shell";
 import { installChatRouteCommands } from "./shortcuts/chatRouteCommands";
 import { startWorkspaceFocus } from "./lib/workspaceFocus";
 import { m } from "./i18n/messages";
+import { displayThreadTitle } from "./lib/threadTitle";
 import { startI18n, subscribeI18n } from "./i18n/runtime";
 import { installCommandPaletteCommands } from "./shortcuts/commandPaletteCommands";
 import { registerOpenFavoriteEditorCommand } from "./components/chat/OpenInPickerShortcut";
@@ -174,7 +175,7 @@ function startDocumentTitle(router: AppRouter): void {
           appAtomRegistry.get(primaryServerConfigAtom)?.environment.serverVersion ?? null,
       }),
       projectTitle: project?.title ?? null,
-      threadTitle: thread?.title ?? null,
+      threadTitle: thread ? displayThreadTitle(thread.title, m) : null,
       ...(getClientSettings().screenReaderWindowTitle && {
         screenReader: {
           threadStatus: windowTitleThreadStatus(thread),

@@ -6,6 +6,7 @@ import {
   type ThreadFolderRule,
   ThreadFolderId,
   type ThreadFolderMutation,
+  ThreadSideTaskId,
   ThreadId,
   type OrchestrationV2ThreadProjection,
   type RunId,
@@ -30,6 +31,7 @@ import type * as ThreadManagement from "../../../orchestration-v2/ThreadManageme
 import * as ThreadSearch from "../../../orchestration-v2/ThreadSearch.ts";
 import * as ScheduledTasks from "../../../scheduledTasks/ScheduledTaskService.ts";
 import * as ThreadFolders from "../../../threadFolders/ThreadFolderService.ts";
+import * as ThreadSideTasks from "../../../threadSideTasks/ThreadSideTaskService.ts";
 import { queuedRunsInDeliveryOrder } from "../../../orchestration-v2/QueuedRunOrder.ts";
 import { ThreadToolkit } from "./tools.ts";
 
@@ -496,6 +498,38 @@ export const layer = McpToolAccess.toLayer(ThreadToolkit, {
         { refusal: "change this environment's sidebar folders" },
       ),
     ),
+  ),
+  // The task belongs to the calling thread, so it is a write to that thread alone.
+  suggest_task: McpToolAccess.writesThreads(
+    () => [undefined],
+    (input) =>
+      Effect.gen(function* () {
+        const scope = yield* McpInvocationContext.McpInvocationContext;
+        if (scope.thread === undefined) {
+          return yield* new OrchestratorMcpFailure({
+            code: "invalid_request",
+            message:
+              "suggest_task works inside a thread: it offers the task to that thread's user.",
+          });
+        }
+        const sideTasks = yield* ThreadSideTasks.ThreadSideTaskService;
+        const random = yield* SecureRandom.SecureRandom;
+        const { task, pending } = yield* sideTasks
+          .suggest({
+            taskId: ThreadSideTaskId.make(`side-task:${yield* random.uuidV4()}`),
+            threadId: scope.thread.threadId,
+            title: input.title,
+            prompt: input.prompt,
+            reason: input.reason ?? null,
+          })
+          .pipe(
+            Effect.mapError(
+              (error) =>
+                new OrchestratorMcpFailure({ code: "orchestration_error", message: error.message }),
+            ),
+          );
+        return { taskId: task.id, pending };
+      }),
   ),
   t3_thread_organize: writesThread((input) =>
     Effect.gen(function* () {

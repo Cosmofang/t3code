@@ -36,6 +36,7 @@ import {
 } from "../ui/menu";
 import { useComposerDraftStore, DraftId } from "../../composerDraftStore";
 import { getProviderModelCapabilities, keepsUnavailableModelOptions } from "../../providerModels";
+import { localizeProviderOptionDescriptors } from "../../providerOptionLabels";
 import { m, type MessageResolver } from "~/i18n/messages";
 import { cn } from "~/lib/utils";
 import { Badge } from "../ui/badge";
@@ -137,10 +138,13 @@ function getSelectedTraits(
           : modelOptions?.filter((option) => option.id !== "agent" || option.value !== "plan"),
         resolve,
       )
-    : getProviderOptionDescriptors({
-        caps,
-        selections: modelOptions,
-      });
+    : localizeProviderOptionDescriptors(
+        getProviderOptionDescriptors({
+          caps,
+          selections: modelOptions,
+        }),
+        resolve,
+      );
   const selectDescriptors = descriptors.filter(
     (descriptor): descriptor is Extract<ProviderOptionDescriptor, { type: "select" }> =>
       descriptor.type === "select",
