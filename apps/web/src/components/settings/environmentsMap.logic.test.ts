@@ -108,11 +108,69 @@ const largeSetup = () =>
       environment("cups", [link("nucbox"), link("staging", { access: "read-only" }), link("ci")]),
       environment("mbp", "unknown", { phase: "offline" }),
       environment("win", "unknown", { phase: "error" }),
-      environment("vps", [link("db-1"), link("db-2"), link("db-3")]),
+      environment("vps", [
+        link("db-1"),
+        link("db-2"),
+        link("db-3"),
+        link("ci", { access: "read-only" }),
+        link("staging", { access: "auto" }),
+        link("cups", { access: "full-access" }),
+      ]),
       environment("old", "unknown", { enabled: false, phase: "available" }),
     ],
     [connectMachine("gpu")],
   );
+
+/** The brief's setup: two hosts share three machines, one has three more and links to the other. */
+const sharedSetup = () =>
+  build([
+    environment("nucbox", [
+      link("fs-1", { access: "full-access" }),
+      link("fs-2", { access: "auto" }),
+      link("fs-3", { access: "read-only" }),
+    ]),
+    environment("mbp", "unknown", { phase: "reconnecting" }),
+    environment("cups", [
+      link("fs-1", { access: "full-access" }),
+      link("fs-2", { access: "full-access" }),
+      link("fs-3", { access: "auto" }),
+      link("fs-4", { access: "auto-accept-edits" }),
+      link("fs-5"),
+      link("fs-6", { access: "read-only" }),
+      link("nucbox", { access: "auto" }),
+    ]),
+  ]);
+
+/** Points along a path the layout wrote: absolute M, H, V, Q and C only. */
+function samplePath(d: string): Array<{ x: number; y: number }> {
+  const points: Array<{ x: number; y: number }> = [];
+  let x = 0;
+  let y = 0;
+  const curve = (controls: ReadonlyArray<number>) => {
+    const xs = [x, ...controls.filter((_, index) => index % 2 === 0)];
+    const ys = [y, ...controls.filter((_, index) => index % 2 === 1)];
+    const at = (values: ReadonlyArray<number>, t: number): number =>
+      values.length === 1
+        ? values[0]!
+        : at(
+            values.slice(1).map((value, index) => values[index]! * (1 - t) + value * t),
+            t,
+          );
+    for (let step = 1; step <= 24; step += 1) {
+      points.push({ x: at(xs, step / 24), y: at(ys, step / 24) });
+    }
+    x = xs.at(-1)!;
+    y = ys.at(-1)!;
+  };
+  for (const [, command, rest] of d.matchAll(/([MHVQC])([^MHVQC]*)/g)) {
+    const values = rest!.trim().split(/[ ,]+/).map(Number);
+    if (command === "M") points.push({ x: (x = values[0]!), y: (y = values[1]!) });
+    else if (command === "H") curve([values[0]!, y]);
+    else if (command === "V") curve([x, values[0]!]);
+    else curve(values);
+  }
+  return points;
+}
 
 const overlaps = (a: FleetRect, b: FleetRect) =>
   a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
@@ -407,27 +465,100 @@ describe("layoutFleetGraph", () => {
     expect(lay(backward)).toEqual(lay(forward));
   });
 
-  it("gives a link between two drawn machines, or into another host's bay, an access badge", () => {
+  it("badges only links between environments, on their own lane and clear of each other", () => {
     const graph = build([
-      environment("a", [link("b"), link("x")]),
+      environment("a", [link("b"), link("c"), link("x")]),
       environment("b", [link("a"), link("x")]),
+      environment("c", [link("a")]),
     ]);
     const layout = layoutFleetGraph(graph);
-    const badge = (from: string, to: string) =>
-      layout.links.get(`link:${node(from)}>${node(to)}`)!.badge;
-    expect(badge("a", "x")).toBeNull();
-    // Many links into one bay step their badges down; the map must still contain them.
-    const shared = build([environment("a", vms(4)), environment("b", [...vms(4), link("a")])]);
-    const crowded = layoutFleetGraph(shared);
-    for (const geometry of crowded.links.values()) {
-      if (geometry.badge) expect(geometry.badge.y + 12).toBeLessThanOrEqual(crowded.height);
-    }
-    const badges = [badge("a", "b")!, badge("b", "a")!, badge("b", "x")!];
+    const geometry = (from: string, to: string) =>
+      layout.links.get(`link:${node(from)}>${node(to)}`)!;
+    expect(geometry("a", "x").badge).toBeNull();
+    expect(geometry("b", "x").badge).toBeNull();
+    const badges = [
+      ["a", "b"],
+      ["a", "c"],
+      ["b", "a"],
+      ["c", "a"],
+    ].map(([from, to]) => {
+      const { badge, d } = geometry(from!, to!);
+      // On the link's own vertical run, between the two machines it joins.
+      expect(samplePath(d).some((point) => Math.abs(point.x - badge!.x) < 0.01)).toBe(true);
+      const ends = [layout.nodes.get(node(from!))!, layout.nodes.get(node(to!))!];
+      expect(badge!.y).toBeGreaterThan(Math.min(...ends.map((rect) => rect.y)));
+      expect(badge!.y).toBeLessThan(Math.max(...ends.map((rect) => rect.y + rect.height)));
+      return badge!;
+    });
     for (const [index, left] of badges.entries()) {
       for (const right of badges.slice(index + 1)) {
         expect(Math.abs(left.x - right.x) >= 34 || Math.abs(left.y - right.y) >= 24).toBe(true);
       }
     }
+  });
+
+  it("keeps two hosts' links into one machine apart, and every link clear of other boxes", () => {
+    for (const graph of [sharedSetup(), largeSetup()]) {
+      for (const expanded of [false, true]) {
+        const closed = fleetStacks(graph, new Set());
+        const stacks = expanded
+          ? fleetStacks(graph, new Set(closed.map((stack) => stack.id)))
+          : closed;
+        const layout = layoutFleetGraph(graph, stacks);
+        expectNoOverlap(layout, membersOf(stacks));
+        const boxes = solidRects(layout);
+        const drawn = [
+          ...[...layout.links].map(([key, geometry]) => ({ key, d: geometry.d })),
+          ...[...layout.stacks].map(([key, geometry]) => ({ key, d: geometry.d })),
+        ];
+        for (const { key, d } of drawn) {
+          for (const point of samplePath(d)) {
+            const hit = boxes.find(
+              ({ rect }) =>
+                point.x > rect.x + 0.5 &&
+                point.x < rect.x + rect.width - 0.5 &&
+                point.y > rect.y + 0.5 &&
+                point.y < rect.y + rect.height - 0.5,
+            );
+            expect(hit?.key, `${key} passes through ${hit?.key}`).toBeUndefined();
+          }
+        }
+        // The last stretch into a machine is level, so two that differ in height never share it.
+        const arrivals = new Map<string, number[]>();
+        for (const edge of graph.edges) {
+          const geometry = edge.kind === "link" ? layout.links.get(edge.id) : undefined;
+          if (geometry === undefined) continue;
+          const [before, last] = samplePath(geometry.d).slice(-2);
+          expect(before!.y).toBeCloseTo(geometry.arrow.y, 0);
+          expect(last!.y).toBe(geometry.arrow.y);
+          arrivals.set(edge.to, [...(arrivals.get(edge.to) ?? []), geometry.arrow.y]);
+        }
+        for (const [target, heights] of arrivals) {
+          const sorted = heights.toSorted((left, right) => left - right);
+          for (const [index, height] of sorted.entries()) {
+            if (index > 0) {
+              expect(height - sorted[index - 1]!, `into ${target}`).toBeGreaterThanOrEqual(6);
+            }
+          }
+        }
+      }
+    }
+  });
+
+  it("puts a machine several hosts link to between them, and one host's machines beside it", () => {
+    const layout = layoutFleetGraph(sharedSetup());
+    const center = (name: string) => {
+      const rect = layout.nodes.get(node(name))!;
+      return rect.y + rect.height / 2;
+    };
+    for (const name of ["fs-1", "fs-2", "fs-3"]) {
+      expect(center(name)).toBeGreaterThan(center("nucbox"));
+      expect(center(name)).toBeLessThan(center("cups"));
+    }
+    expect(center("fs-5")).toBe(center("cups"));
+    // The upper host's link arrives above the lower host's.
+    const arrival = (from: string) => layout.links.get(`link:${node(from)}>${node("fs-2")}`)!.arrow;
+    expect(arrival("nucbox").y).toBeLessThan(arrival("cups").y);
   });
 
   it("keeps the shape key when only health, route state or status changes", () => {

@@ -1,4 +1,4 @@
-import { useAtomValue } from "@effect/atom-react";
+import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import {
   type ConnectionRouteKind,
   connectionRouteId,
@@ -30,6 +30,7 @@ import {
   type KeyboardEvent,
   type PointerEvent,
   type ReactNode,
+  useContext,
   useEffect,
   useEffectEvent,
   useRef,
@@ -38,12 +39,13 @@ import {
 
 import { hasCloudPublicConfig } from "~/cloud/publicConfig";
 import { isElectron } from "~/env";
+import { useLiveRefresh } from "~/hooks/useLiveRefresh";
 import { useNowMinute } from "~/hooks/useNowMinute";
 import { observeResize } from "~/lib/observeResize";
 import { cn } from "~/lib/utils";
 import { type EnvironmentPresentation, useEnvironments } from "~/state/environments";
 import { environmentIdsKey } from "~/state/environmentAtomList";
-import { peerLinkListsAtom, usePeerLinkHosts } from "~/state/peerLinks";
+import { peerLinkEnvironment, peerLinkListsAtom, usePeerLinkHosts } from "~/state/peerLinks";
 import { formatEnvironmentQueryError } from "~/state/query";
 import { relayEnvironmentDiscovery } from "~/state/relay";
 import { preparedConnectionsAtom, useEnvironmentsWithScope } from "~/state/session";
@@ -117,6 +119,20 @@ function healthDash(health: PeerLinkHealth): string | undefined {
   if (health.kind === "failing") return "8 3 1 3";
   return health.kind === "unreachable" ? "5 4" : undefined;
 }
+
+const troubleRank = (health: PeerLinkHealth) =>
+  health.kind === "expired"
+    ? 0
+    : health.kind === "failing"
+      ? 1
+      : health.kind === "unreachable"
+        ? 2
+        : health.expiresInDays === null
+          ? 4
+          : 3;
+/** Worst first: a machine several hosts link to wears the health of its most troubled link. */
+const byTrouble = (left: FleetLinkEdge, right: FleetLinkEdge) =>
+  troubleRank(left.health) - troubleRank(right.health);
 
 /** A machine's outline carries its link's health too. */
 function healthBorder(health: PeerLinkHealth): string {
@@ -211,8 +227,20 @@ function useFleetGraph() {
   const { environments } = useEnvironments();
   const hosts = usePeerLinkHosts();
   const nowMinute = useNowMinute();
-  const lists = useAtomValue(
-    peerLinkListsAtom(environmentIdsKey(hosts.map((host) => host.environmentId))),
+  const hostsKey = environmentIdsKey(hosts.map((host) => host.environmentId));
+  const lists = useAtomValue(peerLinkListsAtom(hostsKey));
+  const registry = useContext(RegistryContext);
+  // Links made from another client or the CLI bump nothing these lists read, so coming back to
+  // the window asks again, as the list view does, and so does a change in which machines can be
+  // asked. Listing probes every linked machine: too costly for a timer.
+  useLiveRefresh(
+    () => {
+      for (const host of hosts) {
+        const list = peerLinkEnvironment.list({ environmentId: host.environmentId, input: {} });
+        if (!registry.get(list).waiting) registry.refresh(list);
+      }
+    },
+    { key: `environments-map:${hostsKey}`, intervalMs: null, refreshOnShow: true },
   );
   const prepared = useAtomValue(
     preparedConnectionsAtom(
@@ -643,17 +671,45 @@ function FleetLegend() {
   );
 }
 
+/** A state short enough for a card. The reason behind it is in the details and the name. */
+function connectionStateText(
+  node: FleetEnvironmentNode,
+  environment: EnvironmentPresentation | undefined,
+  refused: boolean,
+  gt: GT,
+): string {
+  if (!node.enabled && node.phase !== "unsupported") {
+    return gt("Off", { $context: "environment switched off" });
+  }
+  if (refused) return gt("Sign-in refused");
+  switch (node.phase) {
+    case "connected":
+      return gt("Connected");
+    case "connecting":
+      return gt("Connecting…");
+    case "reconnecting":
+      return environment?.connection.awaitingApproval
+        ? gt("Waiting for approval")
+        : gt("Reconnecting…");
+    case "unsupported":
+      return gt("Client not supported");
+    case "error":
+      return gt("Connection failed");
+    case "offline":
+      return gt("Offline");
+    case "available":
+      return gt("Not connected");
+  }
+}
+
 function environmentStatusText(
   node: FleetEnvironmentNode,
   environment: EnvironmentPresentation | undefined,
+  refused: boolean,
   linkCount: number,
   gt: GT,
-  m: Messages,
 ): string {
-  if (node.phase !== "connected") {
-    const status = environment ? savedBackendStatus(environment, m).text : gt("Not connected");
-    return gt("{status}. Links unknown", { status });
-  }
+  if (node.phase !== "connected") return connectionStateText(node, environment, refused, gt);
   switch (node.outgoing) {
     case "loading":
       return gt("Loading links…");
@@ -760,6 +816,17 @@ const FleetScene = memo(function FleetScene({
       "transition-opacity duration-150 motion-reduce:transition-none",
       dimmed && "opacity-40 forced-colors:opacity-60",
     );
+  // Lines run the length of the map and cross each other, so one out of focus fades further
+  // than a machine does.
+  const fadeLine = (dimmed: boolean) =>
+    cn(
+      "transition-opacity duration-150 motion-reduce:transition-none",
+      dimmed && "opacity-15 forced-colors:opacity-40",
+    );
+  const linkLit = (edge: FleetLinkEdge) =>
+    isSelected("edge", edge.id) || (lit?.edges.has(edge.id) ?? false);
+  // Painted last, so the links in focus lie over the ones that are not.
+  const paintOrder = lit === null ? links : links.toSorted((a, b) => +linkLit(a) - +linkLit(b));
   const dragOffer = (targetId: string) =>
     linkDrag === null ? null : fleetLinkOffer(graph, linkDrag.sourceId, targetId);
   const nodeDimmed = (id: string) =>
@@ -909,7 +976,7 @@ const FleetScene = memo(function FleetScene({
               stroke="currentColor"
               strokeWidth={style.width}
               strokeDasharray={style.dash}
-              className={cn(style.wire, fade(lit !== null && !lit.edges.has(edge.id)))}
+              className={cn(style.wire, fadeLine(lit !== null && !lit.edges.has(edge.id)))}
             />
           );
         })}
@@ -921,7 +988,7 @@ const FleetScene = memo(function FleetScene({
           return (
             <g
               key={stack.id}
-              className={cn("text-foreground", fade(lit !== null && !onPath))}
+              className={cn("text-foreground", fadeLine(lit !== null && !onPath))}
               opacity={lit !== null && onPath ? 1 : ACCESS_STROKE_OPACITIES[level]}
             >
               <path
@@ -936,7 +1003,7 @@ const FleetScene = memo(function FleetScene({
             </g>
           );
         })}
-        {links.map((edge) => {
+        {paintOrder.map((edge) => {
           const geometry = layout.links.get(edge.id);
           if (geometry === undefined) return null;
           const { arrow } = geometry;
@@ -947,10 +1014,11 @@ const FleetScene = memo(function FleetScene({
             <g
               key={edge.id}
               className={cn(
+                "pointer-events-none",
                 selected ? "text-primary" : healthy ? "text-foreground" : healthTone(edge.health),
-                fade(lit !== null && !lit.edges.has(edge.id)),
+                fadeLine(lit !== null && !linkLit(edge)),
               )}
-              opacity={selected || lit?.edges.has(edge.id) ? 1 : ACCESS_STROKE_OPACITIES[level]}
+              opacity={linkLit(edge) ? 1 : ACCESS_STROKE_OPACITIES[level]}
             >
               <path
                 d={geometry.d}
@@ -963,20 +1031,35 @@ const FleetScene = memo(function FleetScene({
                 d={`M${arrow.x - arrow.dir * 7} ${arrow.y - 4}L${arrow.x} ${arrow.y}L${arrow.x - arrow.dir * 7} ${arrow.y + 4}Z`}
                 fill="currentColor"
               />
-              {/* Pointer shortcut only: the link is also a row in its machines' details. */}
-              <path
-                aria-hidden
-                data-fleet-item=""
-                d={geometry.d}
-                stroke="transparent"
-                strokeWidth="14"
-                className="cursor-pointer"
-                onClick={() => onSelect(selected ? null : { kind: "edge", id: edge.id })}
-                {...hoverProps({ kind: "edge", id: edge.id })}
-              >
-                <title>{linkSummary(edge, gt, m)}</title>
-              </path>
             </g>
+          );
+        })}
+        {/* Pointer shortcut only: each link is also a row in its machines' details. Kept in a
+            fixed order apart from the painted lines, so focus never moves one under the pointer. */}
+        {links.map((edge) => {
+          const geometry = layout.links.get(edge.id);
+          if (geometry === undefined) return null;
+          const selected = isSelected("edge", edge.id);
+          return (
+            <path
+              key={edge.id}
+              aria-hidden
+              data-fleet-item=""
+              d={geometry.d}
+              stroke="transparent"
+              strokeWidth="14"
+              className="cursor-pointer"
+              onClick={() => onSelect(selected ? null : { kind: "edge", id: edge.id })}
+              {...hoverProps({ kind: "edge", id: edge.id })}
+            >
+              <title>
+                {gt("Link from {source} to {target}: {summary}", {
+                  source: nodeById.get(edge.from)?.label ?? "",
+                  target: nodeById.get(edge.to)?.label ?? "",
+                  summary: linkSummary(edge, gt, m),
+                })}
+              </title>
+            </path>
           );
         })}
         {linkDrag !== null && dragSource !== undefined ? (
@@ -1001,7 +1084,7 @@ const FleetScene = memo(function FleetScene({
             className={cn(
               "absolute flex items-center justify-center rounded-full border bg-background px-1.5 text-2xs leading-none text-muted-foreground",
               ROUTE_STYLES[edge.state].pill,
-              fade(lit !== null && !lit.edges.has(edge.id)),
+              fadeLine(lit !== null && !lit.edges.has(edge.id)),
             )}
           >
             <span className="truncate">{routeKindLabel(edge.routeKind, gt)}</span>
@@ -1028,7 +1111,7 @@ const FleetScene = memo(function FleetScene({
             className={cn(
               "absolute flex h-5 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center rounded-full border border-border bg-card px-1.5 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset aria-pressed:border-primary aria-pressed:text-primary",
               healthTone(edge.health),
-              fade(lit !== null && !lit.edges.has(edge.id)),
+              fadeLine(lit !== null && !lit.edges.has(edge.id)),
             )}
             onClick={() => onSelect(isSelected("edge", edge.id) ? null : target)}
             onFocus={() => setHover(target)}
@@ -1155,7 +1238,12 @@ const FleetScene = memo(function FleetScene({
         }
         const incoming = links.filter((edge) => edge.to === node.id);
         if (node.kind === "target") {
-          const first = incoming[0];
+          // One link in names its access here. Several are told apart by the one in focus:
+          // hovering or selecting a host shows what that host may do on this machine.
+          const focused = incoming.filter((edge) => lit?.edges.has(edge.id));
+          const shown =
+            incoming.length === 1 ? incoming[0] : focused.length === 1 ? focused[0] : undefined;
+          const first = shown ?? incoming.toSorted(byTrouble)[0];
           const compact = rect.height < 32;
           return (
             <button
@@ -1202,14 +1290,20 @@ const FleetScene = memo(function FleetScene({
                         : healthTone(first.health),
                     )}
                   >
-                    {first.health.kind === "reachable" && first.health.expiresInDays === null
-                      ? m(accessConfig[first.link.access].label)
-                      : `${m(accessConfig[first.link.access].label)} · ${healthLabel(first.health, gt)}`}
+                    {shown === undefined
+                      ? gt("{count, plural, one {# link in} other {# links in}}", {
+                          count: incoming.length,
+                          $context:
+                            "how many machines hold a link to this machine; pairs with '# links out'",
+                        })
+                      : first.health.kind === "reachable" && first.health.expiresInDays === null
+                        ? m(accessConfig[first.link.access].label)
+                        : `${m(accessConfig[first.link.access].label)} · ${healthLabel(first.health, gt)}`}
                   </span>
                 )}
               </span>
-              {compact || !first ? null : (
-                <AccessMeter access={first.link.access} className="text-foreground/70" />
+              {compact || !shown ? null : (
+                <AccessMeter access={shown.link.access} className="text-foreground/70" />
               )}
             </button>
           );
@@ -1245,14 +1339,21 @@ const FleetScene = memo(function FleetScene({
           );
         }
         const environment = environmentById.get(node.id);
+        const routes = routeEdges.filter((edge) => edge.to === node.id);
         const status = environmentStatusText(
           node,
           environment,
+          routes.length > 0 && routes.every((edge) => edge.state === "refused"),
           links.filter((edge) => edge.from === node.id).length,
           gt,
-          m,
         );
-        const routes = routeEdges.filter((edge) => edge.to === node.id);
+        // The card's state is short; the name carries the reason and what it leaves unknown.
+        const spoken =
+          node.phase === "connected"
+            ? status
+            : gt("{status}. Links unknown", {
+                status: environment ? savedBackendStatus(environment, m).text : status,
+              });
         const dimmed = !node.enabled || node.phase === "unsupported";
         const handle = layout.handles.get(node.id);
         const over = linkDrag?.overId === node.id;
@@ -1264,7 +1365,7 @@ const FleetScene = memo(function FleetScene({
                 rect,
                 [
                   node.label,
-                  status,
+                  spoken,
                   ...routes.map(
                     (edge) =>
                       `${routeKindLabel(edge.routeKind, gt)}: ${routeStateLabel(edge.state, gt)}`,

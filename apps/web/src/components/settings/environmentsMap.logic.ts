@@ -480,7 +480,7 @@ export interface FleetLinkGeometry {
   readonly d: string;
   /** Arrowhead tip and the horizontal direction it points. */
   readonly arrow: { readonly x: number; readonly y: number; readonly dir: 1 | -1 };
-  /** Where a link whose target does not name its access shows it. */
+  /** Where a link between two environments shows its access; a target's card shows its own. */
   readonly badge: FleetPoint | null;
 }
 
@@ -502,7 +502,7 @@ export interface FleetLayout {
   readonly routes: ReadonlyMap<string, FleetRouteGeometry>;
   /** Links drawn one by one. A stack's links are drawn by the stack. */
   readonly links: ReadonlyMap<string, FleetLinkGeometry>;
-  /** Where an environment's link handle sits, on its right edge. */
+  /** Where an environment's links leave it and its link handle sits, on its right edge. */
   readonly handles: ReadonlyMap<string, FleetPoint>;
   readonly columns: ReadonlyArray<{ readonly id: FleetColumn; readonly x: number }>;
   readonly width: number;
@@ -525,12 +525,14 @@ const FRAME_PAD = 8;
 const FRAME_HEADER = 30;
 const GROUP_GAP = 28;
 const BAY_GAP = 12;
-const BRACKET_FIRST = 22;
-const BRACKET_STEP = 12;
+const LANE_FIRST = 24;
+const LANE_STEP = 14;
+const LANE_CLEARANCE = 10;
 const LINK_RUN = 92;
 const ARROW_LENGTH = 6;
-const PORT_OFFSET = 8;
-const HANDLE_INSET = 12;
+/** How far apart two hosts' links enter one machine, so each keeps its own last stretch. */
+const ENTRY_PITCH = 14;
+const HOST_ENTRY = { first: 12, pitch: 8, reach: 12 };
 const CORNER = 8;
 const BADGE = { width: 34, height: 24 };
 
@@ -552,22 +554,39 @@ function elbowPath(x0: number, y0: number, viaX: number, x1: number, y1: number)
   ].join("");
 }
 
-const sCurve = (x0: number, y0: number, x1: number, y1: number) => {
-  const reach = Math.max(24, (x1 - x0) / 2);
-  return `M${x0} ${y0}C${x0 + reach} ${y0} ${x1 - reach} ${y1} ${x1} ${y1}`;
+/** Straight to `fanX`, across any lanes so they only ever meet it square, then a curve. */
+const sCurve = (x0: number, y0: number, x1: number, y1: number, fanX = x0) => {
+  const reach = Math.max(24, (x1 - fanX) / 2);
+  const lead = fanX > x0 ? `H${fanX}` : "";
+  return `M${x0} ${y0}${lead}C${fanX + reach} ${y0} ${x1 - reach} ${y1} ${x1} ${y1}`;
 };
 
 const frameColumns = (count: number) => Math.max(2, Math.min(4, Math.ceil(Math.sqrt(count / 2.2))));
 
 type BayItem =
-  | { readonly kind: "target"; readonly link: FleetLinkEdge }
+  | { readonly kind: "target"; readonly targetId: string; readonly incoming: FleetLinkEdge[] }
   | { readonly kind: "stack"; readonly stack: FleetStack };
 
+interface FleetRow {
+  /** The host whose own machines these are; a row of shared machines has none. */
+  readonly hostId: string | null;
+  readonly hosts: FleetNode[];
+  readonly items: ReadonlyArray<BayItem>;
+}
+
+/** A vertical run in the channel beside the environments, kept to itself for its whole span. */
+interface FleetLane {
+  readonly id: string;
+  readonly between: boolean;
+  readonly from: number;
+  readonly to: number;
+  index: number;
+}
+
 /**
- * Three columns, left to right: this client, the machines it knows, and the machines seen only
- * through a link, each beside the first environment that links to it. Every route is its own
- * wire into its environment. Positions come from the graph alone, so the same setup always
- * draws the same map.
+ * This client, the machines it knows, and those seen only through a link: beside the one host
+ * linking to them, or in a row between the several that do. A link leaving its host's row takes
+ * its own lane and its own entry, so two hosts' links never share a stretch. Deterministic.
  */
 export function layoutFleetGraph(
   graph: FleetGraph,
@@ -584,118 +603,130 @@ export function layoutFleetGraph(
   const hosts = graph.nodes.filter(
     (node) => node.kind === "environment" || node.kind === "connect",
   );
-  const hostIds = new Set(hosts.map((node) => node.id));
+  const hostIndex = new Map(hosts.map((host, index) => [host.id, index]));
+  const indexOf = (hostId: string) => hostIndex.get(hostId) ?? 0;
   const accessRank = (access: AuthMcpClientAccess) => -ACCESS_ORDER.indexOf(access);
+  const labelOf = (id: string) => byId.get(id)?.label ?? "";
+  const byLabel = (left: string, right: string) =>
+    labelOrder.compare(labelOf(left), labelOf(right)) || (left < right ? -1 : 1);
 
   const stacked = new Set(stacks.flatMap((stack) => stack.edgeIds));
-  const bayOf = new Map<string, BayItem[]>();
-  const push = (hostId: string, item: BayItem) =>
-    bayOf.set(hostId, [...(bayOf.get(hostId) ?? []), item]);
-  for (const stack of stacks.toSorted((a, b) => accessRank(a.access) - accessRank(b.access))) {
-    push(stack.sourceId, { kind: "stack", stack });
+  const incomingOf = new Map<string, FleetLinkEdge[]>();
+  for (const link of links) {
+    if (byId.get(link.to)?.kind !== "target" || stacked.has(link.id)) continue;
+    incomingOf.set(link.to, [...(incomingOf.get(link.to) ?? []), link]);
   }
-  const homed = new Set<string>();
-  const singles = links
-    .filter((link) => byId.get(link.to)?.kind === "target" && !stacked.has(link.id))
-    .filter((link) => (homed.has(link.to) ? false : (homed.add(link.to), true)))
+  const bayOf = new Map<string, BayItem[]>();
+  const bandOf = new Map<string, BayItem[]>();
+  const push = (into: Map<string, BayItem[]>, hostId: string, item: BayItem) =>
+    into.set(hostId, [...(into.get(hostId) ?? []), item]);
+  for (const stack of stacks.toSorted((a, b) => accessRank(a.access) - accessRank(b.access))) {
+    push(bayOf, stack.sourceId, { kind: "stack", stack });
+  }
+  const targets = [...incomingOf].map(([targetId, unsorted]) => ({
+    targetId,
+    // Top to bottom in the order of the hosts, so the upper line is the upper host's.
+    incoming: unsorted.toSorted((left, right) => indexOf(left.from) - indexOf(right.from)),
+  }));
+  for (const { targetId, incoming } of targets
+    .filter((target) => target.incoming.length === 1)
     .toSorted(
       (left, right) =>
-        accessRank(left.link.access) - accessRank(right.link.access) ||
-        labelOrder.compare(byId.get(left.to)?.label ?? "", byId.get(right.to)?.label ?? "") ||
-        (left.to < right.to ? -1 : 1),
-    );
-  for (const link of singles) push(link.from, { kind: "target", link });
+        accessRank(left.incoming[0]!.link.access) - accessRank(right.incoming[0]!.link.access) ||
+        byLabel(left.targetId, right.targetId),
+    )) {
+    push(bayOf, incoming[0]!.from, { kind: "target", targetId, incoming });
+  }
+  // Below the middle host of those linking to it: the shortest total reach, with ties going up.
+  const meanSource = (incoming: ReadonlyArray<FleetLinkEdge>) =>
+    incoming.reduce((sum, link) => sum + indexOf(link.from), 0) / incoming.length;
+  for (const { targetId, incoming } of targets
+    .filter((target) => target.incoming.length > 1)
+    .toSorted(
+      (left, right) =>
+        meanSource(left.incoming) - meanSource(right.incoming) ||
+        byLabel(left.targetId, right.targetId),
+    )) {
+    const anchor = incoming[Math.floor((incoming.length - 1) / 2)]!.from;
+    push(bandOf, anchor, { kind: "target", targetId, incoming });
+  }
 
-  const sameColumn = links.filter((link) => hostIds.has(link.to));
-  const pillX = CLIENT.width + WIRE;
-  const cardX = pillX + PILL.width + PILL_GAP;
-  const cardRight = cardX + CARD.width;
-  const channelWidth =
-    sameColumn.length === 0 ? 0 : BRACKET_FIRST + BRACKET_STEP * (sameColumn.length - 1);
-  const bayX = cardRight + channelWidth + LINK_RUN;
+  // A machine with no links rides beside a shared row instead of pushing the hosts further apart.
+  const linked = new Set(links.flatMap((link) => [link.from, link.to]));
+  const rows: FleetRow[] = [];
+  let shared: FleetRow | null = null;
+  for (const host of hosts) {
+    if (shared !== null && !linked.has(host.id)) {
+      shared.hosts.push(host);
+      continue;
+    }
+    rows.push({ hostId: host.id, hosts: [host], items: bayOf.get(host.id) ?? [] });
+    const band = bandOf.get(host.id);
+    shared = band === undefined ? null : { hostId: null, hosts: [], items: band };
+    if (shared !== null) rows.push(shared);
+  }
 
+  const cardHeight = (host: FleetNode) =>
+    host.kind === "connect"
+      ? OFFER.height
+      : Math.max(
+          CARD.height,
+          (routeEdges.filter((edge) => edge.to === host.id).length - 1) * PORT_PITCH +
+            PILL.height +
+            20,
+        );
   const itemSize = (item: BayItem) => {
-    if (item.kind === "target") return TARGET;
+    if (item.kind === "target") {
+      return {
+        width: TARGET.width,
+        height: Math.max(TARGET.height, 20 + (item.incoming.length - 1) * ENTRY_PITCH),
+      };
+    }
     if (!item.stack.expanded) {
       return { width: TARGET.width + STACK.lift, height: STACK.height + STACK.lift };
     }
     const columns = frameColumns(item.stack.memberIds.length);
-    const rows = Math.ceil(item.stack.memberIds.length / columns);
+    const stackRows = Math.ceil(item.stack.memberIds.length / columns);
     return {
       width: FRAME_PAD * 2 + columns * (CHIP.width + CHIP_GAP) - CHIP_GAP,
-      height: FRAME_HEADER + rows * (CHIP.height + CHIP_GAP) - CHIP_GAP + FRAME_PAD,
+      height: FRAME_HEADER + stackRows * (CHIP.height + CHIP_GAP) - CHIP_GAP + FRAME_PAD,
     };
   };
 
-  let y = HEADER;
-  let width = cardRight + channelWidth;
-  const inBay = new Set<string>();
-  for (const host of hosts) {
-    const bay = bayOf.get(host.id) ?? [];
-    const routeCount = routeEdges.filter((edge) => edge.to === host.id).length;
-    const cardHeight =
-      host.kind === "connect"
-        ? OFFER.height
-        : Math.max(CARD.height, (routeCount - 1) * PORT_PITCH + PILL.height + 20);
-    const sizes = bay.map(itemSize);
-    const bayHeight = sizes.reduce((sum, size) => sum + size.height + BAY_GAP, -BAY_GAP);
-    const groupHeight = Math.max(cardHeight, bayHeight);
-    const centerY = y + groupHeight / 2;
-    const card = { x: cardX, y: centerY - cardHeight / 2, width: CARD.width, height: cardHeight };
-    nodes.set(host.id, card);
-    if (host.kind === "environment") {
-      handles.set(host.id, { x: cardRight, y: card.y + cardHeight - HANDLE_INSET });
-    }
+  const pillX = CLIENT.width + WIRE;
+  const cardX = pillX + PILL.width + PILL_GAP;
+  const cardRight = cardX + CARD.width;
 
-    let itemY = centerY - bayHeight / 2;
-    bay.forEach((item, index) => {
-      const size = sizes[index]!;
-      const endX = bayX - ARROW_LENGTH;
-      if (item.kind === "target") {
-        const rect = { x: bayX, y: itemY, ...TARGET };
-        const targetY = itemY + TARGET.height / 2;
-        nodes.set(item.link.to, rect);
-        inBay.add(item.link.id);
-        linkGeometry.set(item.link.id, {
-          d: sCurve(cardRight, centerY, endX, targetY),
-          arrow: { x: bayX, y: targetY, dir: 1 },
-          badge: null,
-        });
-      } else if (!item.stack.expanded) {
-        const face = {
-          x: bayX,
-          y: itemY + STACK.lift,
-          width: TARGET.width,
-          height: STACK.height,
-        };
-        const faceY = face.y + face.height / 2;
-        stackGeometry.set(item.stack.id, {
-          rect: { x: bayX, y: itemY, ...size },
-          face,
-          d: sCurve(cardRight, centerY, endX, faceY),
-          arrow: { x: bayX, y: faceY },
-        });
-      } else {
-        const columns = frameColumns(item.stack.memberIds.length);
-        item.stack.memberIds.forEach((memberId, member) => {
-          nodes.set(memberId, {
-            x: bayX + FRAME_PAD + (member % columns) * (CHIP.width + CHIP_GAP),
-            y: itemY + FRAME_HEADER + Math.floor(member / columns) * (CHIP.height + CHIP_GAP),
-            ...CHIP,
-          });
-        });
-        const headerY = itemY + FRAME_HEADER / 2;
-        stackGeometry.set(item.stack.id, {
-          rect: { x: bayX, y: itemY, ...size },
-          face: { x: bayX, y: itemY, width: size.width, height: FRAME_HEADER },
-          d: sCurve(cardRight, centerY, endX, headerY),
-          arrow: { x: bayX, y: headerY },
-        });
+  // Heights first: which lanes the channel needs, and so how wide it is, follows from them.
+  const placed: Array<{
+    readonly item: BayItem;
+    readonly y: number;
+    readonly size: { readonly width: number; readonly height: number };
+    readonly hostId: string | null;
+  }> = [];
+  let y = HEADER;
+  for (const row of rows) {
+    const heights = row.hosts.map(cardHeight);
+    const cardsHeight = heights.reduce((sum, height) => sum + height + GROUP_GAP, -GROUP_GAP);
+    const sizes = row.items.map(itemSize);
+    const bayHeight = sizes.reduce((sum, size) => sum + size.height + BAY_GAP, -BAY_GAP);
+    const rowHeight = Math.max(cardsHeight, bayHeight);
+    let cardY = y + (rowHeight - cardsHeight) / 2;
+    row.hosts.forEach((host, index) => {
+      const height = heights[index]!;
+      nodes.set(host.id, { x: cardX, y: cardY, width: CARD.width, height });
+      if (host.kind === "environment") {
+        handles.set(host.id, { x: cardRight, y: cardY + height / 2 });
       }
-      width = Math.max(width, bayX + size.width);
+      cardY += height + GROUP_GAP;
+    });
+    let itemY = y + (rowHeight - bayHeight) / 2;
+    row.items.forEach((item, index) => {
+      const size = sizes[index]!;
+      placed.push({ item, y: itemY, size, hostId: row.hostId });
       itemY += size.height + BAY_GAP;
     });
-    y += groupHeight + GROUP_GAP;
+    y += rowHeight + GROUP_GAP;
   }
   const height = Math.max(HEADER + CLIENT.height, y - GROUP_GAP);
 
@@ -703,6 +734,142 @@ export function layoutFleetGraph(
     const rect = nodes.get(id)!;
     return rect.y + rect.height / 2;
   };
+
+  /** Where each link into a machine several hosts link to arrives. */
+  const entryY = new Map<string, number>();
+  for (const { item, y: itemY, size, hostId } of placed) {
+    if (item.kind !== "target" || hostId !== null) continue;
+    item.incoming.forEach((link, index) => {
+      entryY.set(
+        link.id,
+        itemY + size.height / 2 + (index - (item.incoming.length - 1) / 2) * ENTRY_PITCH,
+      );
+    });
+  }
+  // Links between environments arrive above the centre from above and below it from below.
+  // The longest takes the entry nearest the centre, so two arriving together never cross.
+  const between = links.filter((link) => hostIndex.has(link.to));
+  const reach = (link: FleetLinkEdge) => Math.abs(indexOf(link.to) - indexOf(link.from));
+  for (const host of hosts) {
+    for (const side of [-1, 1]) {
+      const arriving = between
+        .filter(
+          (link) =>
+            link.to === host.id && Math.sign(indexOf(link.to) - indexOf(link.from)) === -side,
+        )
+        .toSorted((left, right) => reach(right) - reach(left) || (left.id < right.id ? -1 : 1));
+      const pitch = Math.min(HOST_ENTRY.pitch, HOST_ENTRY.reach / Math.max(1, arriving.length - 1));
+      arriving.forEach((link, index) => {
+        entryY.set(link.id, centerOf(host.id) + side * (HOST_ENTRY.first + index * pitch));
+      });
+    }
+  }
+
+  // One lane per link between environments and one per host for each shared row it reaches.
+  // Shorter runs sit nearer the cards, so a longer one passes outside them instead of through.
+  const trunkOf = new Map<string, FleetLane>();
+  const lanes: FleetLane[] = between.map((link) => ({
+    id: link.id,
+    between: true,
+    from: centerOf(link.from),
+    to: entryY.get(link.id)!,
+    index: 0,
+  }));
+  for (const [anchor, band] of bandOf) {
+    const trunks = new Map<string, FleetLane>();
+    for (const item of band) {
+      if (item.kind !== "target") continue;
+      for (const link of item.incoming) {
+        const from = centerOf(link.from);
+        const to = entryY.get(link.id)!;
+        const known = trunks.get(link.from);
+        const lane: FleetLane =
+          known === undefined || Math.abs(to - from) > Math.abs(known.to - from)
+            ? { id: `${link.from}>${anchor}`, between: false, from, to, index: 0 }
+            : known;
+        trunks.set(link.from, lane);
+      }
+    }
+    for (const item of band) {
+      if (item.kind !== "target") continue;
+      for (const link of item.incoming) trunkOf.set(link.id, trunks.get(link.from)!);
+    }
+    lanes.push(...trunks.values());
+  }
+  const span = (lane: FleetLane) => Math.abs(lane.to - lane.from);
+  const taken: FleetLane[][] = [];
+  for (const lane of lanes.toSorted(
+    (left, right) =>
+      Number(right.between) - Number(left.between) ||
+      span(left) - span(right) ||
+      (left.id < right.id ? -1 : 1),
+  )) {
+    const top = Math.min(lane.from, lane.to) - LANE_CLEARANCE;
+    const bottom = Math.max(lane.from, lane.to) + LANE_CLEARANCE;
+    let index = 0;
+    while (
+      taken[index]?.some(
+        (other) => Math.min(other.from, other.to) < bottom && top < Math.max(other.from, other.to),
+      )
+    ) {
+      index += 1;
+    }
+    lane.index = index;
+    (taken[index] ??= []).push(lane);
+  }
+  const laneX = (lane: FleetLane) => cardRight + LANE_FIRST + lane.index * LANE_STEP;
+  const fanX = taken.length === 0 ? cardRight : cardRight + LANE_FIRST + taken.length * LANE_STEP;
+  const bayX = fanX + LINK_RUN;
+  const endX = bayX - ARROW_LENGTH;
+
+  let width = fanX;
+  for (const { item, y: itemY, size, hostId } of placed) {
+    width = Math.max(width, bayX + size.width);
+    if (item.kind === "target") {
+      nodes.set(item.targetId, { x: bayX, y: itemY, ...size });
+      for (const link of item.incoming) {
+        const trunk = trunkOf.get(link.id);
+        const targetY = entryY.get(link.id) ?? itemY + size.height / 2;
+        linkGeometry.set(link.id, {
+          d:
+            trunk === undefined
+              ? sCurve(cardRight, centerOf(link.from), endX, targetY, fanX)
+              : elbowPath(cardRight, trunk.from, laneX(trunk), endX, targetY),
+          arrow: { x: bayX, y: targetY, dir: 1 },
+          badge: null,
+        });
+      }
+      continue;
+    }
+    const originY = centerOf(hostId ?? item.stack.sourceId);
+    if (!item.stack.expanded) {
+      const face = { x: bayX, y: itemY + STACK.lift, width: TARGET.width, height: STACK.height };
+      const faceY = face.y + face.height / 2;
+      stackGeometry.set(item.stack.id, {
+        rect: { x: bayX, y: itemY, ...size },
+        face,
+        d: sCurve(cardRight, originY, endX, faceY, fanX),
+        arrow: { x: bayX, y: faceY },
+      });
+      continue;
+    }
+    const columns = frameColumns(item.stack.memberIds.length);
+    item.stack.memberIds.forEach((memberId, member) => {
+      nodes.set(memberId, {
+        x: bayX + FRAME_PAD + (member % columns) * (CHIP.width + CHIP_GAP),
+        y: itemY + FRAME_HEADER + Math.floor(member / columns) * (CHIP.height + CHIP_GAP),
+        ...CHIP,
+      });
+    });
+    const headerY = itemY + FRAME_HEADER / 2;
+    stackGeometry.set(item.stack.id, {
+      rect: { x: bayX, y: itemY, ...size },
+      face: { x: bayX, y: itemY, width: size.width, height: FRAME_HEADER },
+      d: sCurve(cardRight, originY, endX, headerY, fanX),
+      arrow: { x: bayX, y: headerY },
+    });
+  }
+
   const hostCenters = hosts.map((host) => centerOf(host.id));
   const clientCenterY =
     hostCenters.length === 0
@@ -731,53 +898,33 @@ export function layoutFleetGraph(
     });
   }
 
-  // Two links between the same pair run side by side, so the second badge steps below the first.
+  // The badge sits on the link's own lane, in the gap just past the environment it leaves, so
+  // it is never beside a machine the link has nothing to do with. A second one steps onward.
   const badges: FleetPoint[] = [];
-  const placeBadge = (x: number, startY: number) => {
-    let badgeY = startY;
+  for (const lane of lanes) {
+    if (!lane.between) continue;
+    const link = between.find((entry) => entry.id === lane.id)!;
+    const source = nodes.get(link.from)!;
+    const direction = Math.sign(lane.to - lane.from) || 1;
+    const x = laneX(lane);
+    let badgeY =
+      (direction > 0 ? source.y + source.height : source.y) + (direction * GROUP_GAP) / 2;
     while (
       badges.some(
         (other) => Math.abs(other.x - x) < BADGE.width && Math.abs(other.y - badgeY) < BADGE.height,
       )
     ) {
-      badgeY += BADGE.height;
+      badgeY += direction * BADGE.height;
     }
     const badge = { x, y: badgeY };
     badges.push(badge);
-    return badge;
-  };
-
-  // Shorter spans take the inner brackets, so they nest instead of crossing.
-  const span = (link: FleetLinkEdge) => Math.abs(centerOf(link.to) - centerOf(link.from));
-  sameColumn
-    .toSorted((left, right) => span(left) - span(right) || (left.id < right.id ? -1 : 1))
-    .forEach((link, index) => {
-      const bracketX = cardRight + BRACKET_FIRST + index * BRACKET_STEP;
-      const fromY = centerOf(link.from) - PORT_OFFSET;
-      const toY = centerOf(link.to) + PORT_OFFSET;
-      linkGeometry.set(link.id, {
-        d: elbowPath(cardRight, fromY, bracketX, cardRight + ARROW_LENGTH, toY),
-        arrow: { x: cardRight, y: toY, dir: -1 },
-        badge: placeBadge(bracketX, (fromY + toY) / 2),
-      });
-    });
-
-  // A machine in one environment's bay that a second environment also links to.
-  for (const link of links) {
-    if (hostIds.has(link.to) || inBay.has(link.id) || stacked.has(link.id)) continue;
-    const target = nodes.get(link.to)!;
-    const fromY = centerOf(link.from) - PORT_OFFSET;
-    const toY = target.y + target.height / 2;
     linkGeometry.set(link.id, {
-      d: sCurve(cardRight, fromY, target.x - ARROW_LENGTH, toY),
-      arrow: { x: target.x, y: toY, dir: 1 },
-      // Beside the target, clear of the brackets between environments.
-      badge: placeBadge(target.x - ARROW_LENGTH - BADGE.width, toY),
+      d: elbowPath(cardRight, lane.from, x, cardRight + ARROW_LENGTH, lane.to),
+      arrow: { x: cardRight, y: lane.to, dir: -1 },
+      badge,
     });
   }
 
-  // A badge stepped below its neighbours can end up past the last machine.
-  const badgeBottom = Math.max(0, ...badges.map((badge) => badge.y + BADGE.height / 2));
   return {
     nodes,
     stacks: stackGeometry,
@@ -787,10 +934,10 @@ export function layoutFleetGraph(
     columns: [
       { id: "client", x: 0 },
       ...(hosts.length > 0 ? [{ id: "environments" as const, x: cardX }] : []),
-      ...(bayOf.size > 0 ? [{ id: "targets" as const, x: bayX }] : []),
+      ...(placed.length > 0 ? [{ id: "targets" as const, x: bayX }] : []),
     ],
     width,
-    height: Math.max(height, badgeBottom),
+    height,
   };
 }
 
