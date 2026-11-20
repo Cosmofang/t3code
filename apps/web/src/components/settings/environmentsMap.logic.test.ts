@@ -475,6 +475,11 @@ describe("layoutFleetGraph", () => {
     const geometry = (from: string, to: string) =>
       layout.links.get(`link:${node(from)}>${node(to)}`)!;
     expect(geometry("a", "x").badge).toBeNull();
+    // With no machine to the right, the badge is the map's right edge.
+    const pair = layoutFleetGraph(build([environment("a", [link("b")]), environment("b")]));
+    expect(pair.links.get(`link:${node("a")}>${node("b")}`)!.badge!.x + 17).toBeLessThanOrEqual(
+      pair.width,
+    );
     expect(geometry("b", "x").badge).toBeNull();
     const badges = [
       ["a", "b"],
@@ -609,7 +614,9 @@ describe("fitting the view", () => {
     expect(view.scale).toBeLessThan(0.3);
     expect(1572 * view.scale).toBeLessThanOrEqual(360);
     expect(zoomFleetView(view, 0.8, { x: 0, y: 0 }).scale).toBe(view.scale);
-    expect(zoomFleetView(view, 1.25, { x: 0, y: 0 }).scale).toBeGreaterThan(view.scale);
+    const closer = zoomFleetView(view, 1.25, { x: 0, y: 0 }, view.scale);
+    expect(closer.scale).toBeGreaterThan(view.scale);
+    expect(zoomFleetView(closer, 0.8, { x: 0, y: 0 }, view.scale).scale).toBeCloseTo(view.scale);
   });
 
   it("sizes the canvas to the fitted map within its bounds", () => {

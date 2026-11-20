@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import {
   memo,
+  type FocusEvent,
   type KeyboardEvent,
   type PointerEvent,
   type ReactNode,
@@ -446,6 +447,11 @@ function FleetCanvas({ shapeKey, ...scene }: FleetSceneProps & { readonly shapeK
   // The canvas is as tall as the fitted map wants, so the height never feeds back into the fit.
   const size =
     width === null ? null : { width, height: fleetCanvasHeight(layout, width, CANVAS_HEIGHT) };
+  // A new shape drops the held view for good: returning to an old shape must fit, not restore
+  // a pan made before the map changed.
+  if (manual !== null && manual.key !== "" && manual.key !== shapeKey) {
+    setManual({ ...manual, key: "" });
+  }
   const held = manual?.key === shapeKey ? manual : null;
   const view = held?.view ?? (size === null ? null : fitFleetLayout(layout, size));
   const glide = manual !== null && (held === null || held.glide);
@@ -458,7 +464,12 @@ function FleetCanvas({ shapeKey, ...scene }: FleetSceneProps & { readonly shapeK
   ) => {
     if (view === null || size === null) return;
     setView(
-      zoomFleetView(view, factor, anchor ?? { x: size.width / 2, y: size.height / 2 }),
+      zoomFleetView(
+        view,
+        factor,
+        anchor ?? { x: size.width / 2, y: size.height / 2 },
+        fitFleetLayout(layout, size).scale,
+      ),
       eased,
     );
   };
@@ -864,9 +875,11 @@ const FleetScene = memo(function FleetScene({
     tabIndex: target.id === tabStop ? 0 : -1,
     style: { left: rect.x, top: rect.y, width: rect.width, height: rect.height },
     onClick: () => onSelect(isSelected(target.kind, target.id) ? null : target),
-    onFocus: () => {
+    onFocus: (event: FocusEvent<HTMLElement>) => {
       setRoving(target.id);
       setHover(target);
+      // Tabbing back in can land on a machine panned out of view; a click cannot.
+      if (event.currentTarget.matches(":focus-visible")) onReveal(rect);
     },
     onBlur: () => setHover(null),
     ...hoverProps(target),
@@ -883,6 +896,14 @@ const FleetScene = memo(function FleetScene({
     if (!bounds || bounds.width === 0) return null;
     const scale = bounds.width / layout.width;
     return { x: (event.clientX - bounds.left) / scale, y: (event.clientY - bounds.top) / scale };
+  };
+  const dropTargetAt = (sourceId: string, event: PointerEvent<HTMLElement>) => {
+    const over = document
+      .elementFromPoint(event.clientX, event.clientY)
+      ?.closest<HTMLElement>("[data-fleet-node]")?.dataset.fleetNode;
+    return over !== undefined && fleetLinkOffer(graph, sourceId, over).kind === "link"
+      ? over
+      : null;
   };
   const handleProps = (sourceId: string) => ({
     onPointerDown: (event: PointerEvent<HTMLButtonElement>) => {
@@ -905,12 +926,7 @@ const FleetScene = memo(function FleetScene({
       current.moved = true;
       const point = toScene(event);
       if (point === null) return;
-      const over = document
-        .elementFromPoint(event.clientX, event.clientY)
-        ?.closest<HTMLElement>("[data-fleet-node]")?.dataset.fleetNode;
-      const overId =
-        over !== undefined && fleetLinkOffer(graph, sourceId, over).kind === "link" ? over : null;
-      setLinkDrag({ sourceId, ...point, overId });
+      setLinkDrag({ sourceId, ...point, overId: dropTargetAt(sourceId, event) });
     },
     onPointerUp: (event: PointerEvent<HTMLButtonElement>) => {
       const current = handleDrag.current;
@@ -918,7 +934,8 @@ const FleetScene = memo(function FleetScene({
       handleDrag.current = null;
       if (!current.moved) return;
       swallowClick.current = true;
-      const overId = linkDrag?.overId ?? null;
+      // Asked again at release: the map can move under a pointer that has stopped.
+      const overId = dropTargetAt(sourceId, event);
       setLinkDrag(null);
       if (overId !== null) onLink(sourceId, overId);
     },
@@ -1417,6 +1434,9 @@ const FleetScene = memo(function FleetScene({
                 tabIndex={node.id === tabStop ? 0 : -1}
                 aria-label={gt("Link {label} to another machine", { label: node.label })}
                 style={{ left: handle.x - 9, top: handle.y - 9 }}
+                onFocus={(event) => {
+                  if (event.currentTarget.matches(":focus-visible")) onReveal(rect);
+                }}
                 className={cn(
                   "absolute flex size-4.5 cursor-crosshair touch-none items-center justify-center rounded-full bg-primary text-primary-foreground outline-none hover:scale-110 focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-inset motion-safe:transition-transform motion-safe:duration-150 forced-colors:border",
                   fade(nodeDimmed(node.id)),

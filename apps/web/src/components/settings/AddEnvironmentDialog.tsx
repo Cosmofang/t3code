@@ -164,7 +164,7 @@ export function AddEnvironmentDialog({
     if (!nextOpen) {
       savedBackendSessionRef.current += 1;
       setSavedBackendMode("remote");
-      setSavedBackendHost("");
+      setSavedBackendHost(initialHost);
       setSavedBackendPairingCode("");
       setSavedBackendSshHost("");
       setSavedBackendSshUsername("");

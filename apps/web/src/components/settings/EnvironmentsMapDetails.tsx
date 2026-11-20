@@ -196,8 +196,11 @@ function FleetSummary({
   const settled = reading.every(
     (entry) => entry.phase !== "connected" || entry.outgoing !== "loading",
   );
-  // Counts come only from lists that loaded: a failed or unread list is not "no links".
-  const readable = reading.some((entry) => entry.outgoing === "loaded");
+  // Counts come only from lists that loaded: a failed or unread list is not "no links", and
+  // one failed list among several leaves the total unknown.
+  const readable =
+    reading.some((entry) => entry.outgoing === "loaded") &&
+    !reading.some((entry) => entry.phase === "connected" && entry.outgoing === "error");
   const attention = links.filter((edge) => linkNeedsAttention(edge.health)).length;
   const machines = graph.nodes.length - 1;
   const canLink = reading.some((entry) => entry.linking === "ready");

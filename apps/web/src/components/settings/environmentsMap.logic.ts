@@ -918,6 +918,7 @@ export function layoutFleetGraph(
     }
     const badge = { x, y: badgeY };
     badges.push(badge);
+    width = Math.max(width, x + BADGE.width / 2);
     linkGeometry.set(link.id, {
       d: elbowPath(cardRight, lane.from, x, cardRight + ARROW_LENGTH, lane.to),
       arrow: { x: cardRight, y: lane.to, dir: -1 },
@@ -1027,9 +1028,11 @@ export function zoomFleetView(
   view: FleetViewTransform,
   factor: number,
   anchor: FleetPoint,
+  fitScale = view.scale,
 ): FleetViewTransform {
-  // A fit of a very large setup can sit below the manual minimum; zooming out must not jump up.
-  const floor = Math.min(FLEET_MIN_SCALE, view.scale);
+  // A fit of a very large setup sits below the manual minimum: zooming out stops at the fit
+  // instead of jumping up, and can return to it after zooming in.
+  const floor = Math.min(FLEET_MIN_SCALE, fitScale, view.scale);
   const scale = Math.max(floor, Math.min(FLEET_MAX_SCALE, view.scale * factor));
   const ratio = scale / view.scale;
   return {
