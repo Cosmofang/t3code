@@ -18,6 +18,8 @@ export const DEFAULT_CODE_FONT_STACK =
   '"SF Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace';
 
 export const TYPOGRAPHY_ADVANCED_STORAGE_KEY = "t3code:typography-advanced";
+// Fork: separate prompt and terminal sizes start on, as in the maintainer's setup.
+export const DEFAULT_TYPOGRAPHY_ADVANCED = true;
 
 export function resolveTerminalFontPreference(input: {
   readonly advanced: boolean;

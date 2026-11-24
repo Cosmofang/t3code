@@ -51,3 +51,6 @@ node_modules/
 .pnpm-store/
 
 /packages/ssh/.ssh-launcher-test-*/
+
+# Fork: the bundled default font is ~40 MB; copy it in from an installed Maple Mono NF CN before building.
+apps/web/public/fonts/maple-mono/*.ttf

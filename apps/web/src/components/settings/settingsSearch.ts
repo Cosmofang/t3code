@@ -11,7 +11,10 @@ import {
 import { DEFAULT_KEYBINDINGS } from "@t3tools/shared/keybindings";
 import * as Schema from "effect/Schema";
 import { decodeMsg, msg, useMessages } from "gt-react";
-import { TYPOGRAPHY_ADVANCED_STORAGE_KEY } from "../../appearanceFonts";
+import {
+  DEFAULT_TYPOGRAPHY_ADVANCED,
+  TYPOGRAPHY_ADVANCED_STORAGE_KEY,
+} from "../../appearanceFonts";
 import { writeLocalStorageValue } from "../../hooks/useLocalStorage";
 import type { MessageResolver } from "../../i18n/messages";
 import { commandLabel } from "./KeybindingsSettings.logic";
@@ -1708,6 +1711,11 @@ export function isAdvancedTypographyTarget(targetId: string): boolean {
  */
 export function revealSettingsSearchTarget(targetId: string): void {
   if (isAdvancedTypographyTarget(targetId)) {
-    writeLocalStorageValue(TYPOGRAPHY_ADVANCED_STORAGE_KEY, true, false, Schema.Boolean);
+    writeLocalStorageValue(
+      TYPOGRAPHY_ADVANCED_STORAGE_KEY,
+      true,
+      DEFAULT_TYPOGRAPHY_ADVANCED,
+      Schema.Boolean,
+    );
   }
 }

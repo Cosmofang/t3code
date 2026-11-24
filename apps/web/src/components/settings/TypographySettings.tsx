@@ -25,6 +25,7 @@ import {
   resolveDefaultFamilyLabel,
   resolveTerminalFontPreference,
   resolveTerminalFontSizePreference,
+  DEFAULT_TYPOGRAPHY_ADVANCED,
   TYPOGRAPHY_ADVANCED_STORAGE_KEY,
 } from "../../appearanceFonts";
 import { AdvancedSettings } from "./AdvancedSettings";
@@ -359,7 +360,7 @@ export function TypographySection() {
   const searchableSetting = useSearchableSetting();
   const [advanced, setAdvanced] = useLocalStorage(
     TYPOGRAPHY_ADVANCED_STORAGE_KEY,
-    false,
+    DEFAULT_TYPOGRAPHY_ADVANCED,
     Schema.Boolean,
   );
   // A deep link or history step must persist the flag too: the terminal reads it, so advanced

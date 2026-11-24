@@ -40,7 +40,10 @@ import {
 import { msg, T, useGT, useLocale, useMessages, Var } from "gt-react";
 import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
 
-import { TYPOGRAPHY_ADVANCED_STORAGE_KEY } from "../../appearanceFonts";
+import {
+  DEFAULT_TYPOGRAPHY_ADVANCED,
+  TYPOGRAPHY_ADVANCED_STORAGE_KEY,
+} from "../../appearanceFonts";
 import { MOBILE_APP_URL } from "../../branding";
 import { isElectron } from "../../env";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
@@ -1300,7 +1303,7 @@ function AgentInstallTerminal({
   const gt = useGT();
   const [advancedTypography] = useLocalStorage(
     TYPOGRAPHY_ADVANCED_STORAGE_KEY,
-    false,
+    DEFAULT_TYPOGRAPHY_ADVANCED,
     Schema.Boolean,
   );
   const openTerminal = useAtomCommand(terminalEnvironment.open, { reportFailure: false });

@@ -9,7 +9,11 @@ import { createBrowserHistory, createHashHistory } from "@tanstack/react-router"
 import * as Schema from "effect/Schema";
 
 import { applyAppearanceContrast } from "./appearanceContrast";
-import { applyAppearanceFontVariables, TYPOGRAPHY_ADVANCED_STORAGE_KEY } from "./appearanceFonts";
+import {
+  applyAppearanceFontVariables,
+  DEFAULT_TYPOGRAPHY_ADVANCED,
+  TYPOGRAPHY_ADVANCED_STORAGE_KEY,
+} from "./appearanceFonts";
 import { startElectronBrowserHost } from "./browser/ElectronBrowserHost";
 import { startBrowserProfileReporting } from "./browser/BrowserProfileReporter";
 import { startPreviewTitleRecording } from "./browserHistoryStore";
@@ -79,7 +83,7 @@ function startClientAppearance(): void {
     applied = settings;
     const separateFonts = readLocalStorageValue(
       TYPOGRAPHY_ADVANCED_STORAGE_KEY,
-      false,
+      DEFAULT_TYPOGRAPHY_ADVANCED,
       Schema.Boolean,
     );
     const previousSeparateFonts = appliedSeparateFonts;

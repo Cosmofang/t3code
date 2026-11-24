@@ -7,6 +7,7 @@ import { Atom } from "effect/reactivity";
 import { msg } from "gt-react";
 import "culori/css";
 import { converter, parse } from "culori/fn";
+import paperThemeFile from "../../../themes/paper.json";
 import {
   BUILT_IN_THEMES,
   EMBER_THEME,
@@ -1226,8 +1227,6 @@ export function updateThemeColorFamily(
   }
 }
 
-const BUILT_IN_THEME_DEFINITIONS: ReadonlyArray<ThemeDefinition> = BUILT_IN_THEMES;
-
 export function getThemeDefinition(theme: ThemePreference): ThemeDefinition | null {
   const themeId = themeIdFromPreference(theme);
   return (
@@ -1856,3 +1855,11 @@ export function resolveThemeHalf(
 ): ThemePreference {
   return halves?.[appearance] ?? theme;
 }
+
+// Fork: Paper ships built in; the server's default theme points fresh installs at it.
+// Defined last so parseThemeFile and everything it reads are initialized.
+export const PAPER_THEME: ThemeDefinition = parseThemeFile(paperThemeFile);
+const BUILT_IN_THEME_DEFINITIONS: ReadonlyArray<ThemeDefinition> = [
+  ...BUILT_IN_THEMES,
+  PAPER_THEME,
+];

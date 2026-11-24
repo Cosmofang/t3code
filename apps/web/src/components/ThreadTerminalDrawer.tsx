@@ -105,6 +105,7 @@ import {
 import {
   resolveTerminalFontPreference,
   resolveTerminalFontSizePreference,
+  DEFAULT_TYPOGRAPHY_ADVANCED,
   TYPOGRAPHY_ADVANCED_STORAGE_KEY,
 } from "../appearanceFonts";
 
@@ -1521,7 +1522,7 @@ export default function ThreadTerminalDrawer({
   const isPanel = mode === "panel";
   const [advancedTypography] = useLocalStorage(
     TYPOGRAPHY_ADVANCED_STORAGE_KEY,
-    false,
+    DEFAULT_TYPOGRAPHY_ADVANCED,
     Schema.Boolean,
   );
   const drawerRef = useRef<HTMLElement | null>(null);

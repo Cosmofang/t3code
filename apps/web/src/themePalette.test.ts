@@ -727,8 +727,8 @@ describe("stored theme preferences", () => {
   it("lets built-in and published halves unlock an appearance the base theme lacks", () => {
     const lightOnly = parseThemeFile({
       version: THEME_FILE_VERSION,
-      id: "paper",
-      name: "Paper",
+      id: "parchment",
+      name: "Parchment",
       appearance: "light",
       colors: { canvas: "#f8fbff" },
     });
@@ -751,17 +751,19 @@ describe("stored theme preferences", () => {
     });
     invalidateCustomThemes();
     try {
-      expect(resolveThemeAppearance("paper", true, true)).toBe("light");
+      expect(resolveThemeAppearance("parchment", true, true)).toBe("light");
       const halves = { dark: GROVE_THEME.id };
-      expect(resolveThemeAppearance("paper", true, true, undefined, halves)).toBe("dark");
-      expect(resolveThemeAppearance("paper", false, false, "dark", halves)).toBe("dark");
-      expect(resolveDesktopTheme("paper", true, undefined, halves)).toBe("system");
+      expect(resolveThemeAppearance("parchment", true, true, undefined, halves)).toBe("dark");
+      expect(resolveThemeAppearance("parchment", false, false, "dark", halves)).toBe("dark");
+      expect(resolveDesktopTheme("parchment", true, undefined, halves)).toBe("system");
 
       expect(getThemeDefinition("constructor")).toEqual(publishedTheme);
       expect(canonicalThemePreference("constructor")).toBe("constructor");
       const publishedHalves = parseThemeHalves(JSON.stringify({ dark: "constructor" }));
       expect(publishedHalves).toEqual({ dark: "constructor" });
-      expect(resolveThemeAppearance("paper", true, true, undefined, publishedHalves)).toBe("dark");
+      expect(resolveThemeAppearance("parchment", true, true, undefined, publishedHalves)).toBe(
+        "dark",
+      );
     } finally {
       vi.unstubAllGlobals();
       invalidateCustomThemes();
