@@ -85,3 +85,31 @@ export async function mutateThreadSideTasks(
   }
   return null;
 }
+
+export interface EnvironmentSideTask extends ThreadSideTask {
+  readonly environmentId: EnvironmentId;
+}
+
+let previousAllInputs: ReadonlyArray<ReadonlyArray<ThreadSideTask>> = [];
+let previousAll: ReadonlyArray<EnvironmentSideTask> = [];
+
+/** Every connected environment's side tasks, newest first. */
+const allSideTasksAtom = Atom.make((get) => {
+  const environmentIds = [...get(environmentServerConfigsAtom).keys()];
+  const lists = environmentIds.map((id) => get(environmentSideTasksAtomFamily(id)));
+  if (
+    lists.length === previousAllInputs.length &&
+    lists.every((list, index) => list === previousAllInputs[index])
+  ) {
+    return previousAll;
+  }
+  previousAllInputs = lists;
+  previousAll = lists.flatMap((list, index) =>
+    list.map((task) => ({ ...task, environmentId: environmentIds[index]! })),
+  );
+  return previousAll;
+}).pipe(Atom.withLabel("web-thread-side-tasks:all"));
+
+export function useAllSideTasks(): ReadonlyArray<EnvironmentSideTask> {
+  return useAtomValue(allSideTasksAtom);
+}

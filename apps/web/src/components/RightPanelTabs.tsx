@@ -48,6 +48,7 @@ import {
   Files,
   Globe2,
   MessagesSquare,
+  SquareKanban,
   Plus,
   TerminalSquare,
   Volume2Icon,
@@ -151,6 +152,8 @@ export interface RightPanelTabsProps {
   onAddDevice: () => void;
   /** Absent where side chats are not offered. */
   onAddSideChat?: (() => void) | undefined;
+  /** Absent where the board is not offered. */
+  onAddBoard?: (() => void) | undefined;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
@@ -335,6 +338,8 @@ function RightPanelEmptyState(props: {
   onAddDevice: () => void;
   /** Absent where side chats are not offered. */
   onAddSideChat?: (() => void) | undefined;
+  /** Absent where the board is not offered. */
+  onAddBoard?: (() => void) | undefined;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
@@ -418,6 +423,18 @@ function RightPanelEmptyState(props: {
             disabledReason:
               props.sideChatDisabledReason ?? messages(SURFACE_UNAVAILABLE_HINTS.sideChat),
             onClick: props.onAddSideChat,
+          },
+        ]
+      : []),
+    ...(props.onAddBoard
+      ? [
+          {
+            label: msg("Board", { $context: "panel tab showing the board of notes and work" }),
+            icon: SquareKanban,
+            shortcut: "K",
+            available: true,
+            disabledReason: "",
+            onClick: props.onAddBoard,
           },
         ]
       : []),
@@ -607,6 +624,8 @@ function surfaceTitle(
       return `#${surface.number}`;
     case "pull-requests":
       return resolve(msg("Pull requests"));
+    case "board":
+      return resolve(msg("Board", { $context: "panel tab showing the board of notes and work" }));
     case "issue":
       // A git host numbers its issues; a tracker with keys of its own, such as Linear, names them.
       return /^\d+$/.test(surface.key) ? `#${surface.key}` : surface.key;
@@ -702,6 +721,8 @@ function SurfaceIcon({
       );
     case "pull-requests":
       return <PullRequestGlyph.link className="size-3 shrink-0" />;
+    case "board":
+      return <SquareKanban className="size-3 shrink-0" />;
     case "issue":
       return <IssueSurfaceIcon surface={surface} environmentId={environmentId} />;
     case "side-chat":
@@ -1238,6 +1259,18 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
           },
         ]
       : []),
+    ...(props.onAddBoard
+      ? [
+          {
+            label: msg("Board", { $context: "panel tab showing the board of notes and work" }),
+            icon: SquareKanban,
+            shortcut: "K",
+            available: true,
+            disabledReason: "",
+            onClick: props.onAddBoard,
+          },
+        ]
+      : []),
   ] as const;
 
   const handleAddSurfaceMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -1643,6 +1676,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             onAddPullRequests={props.onAddPullRequests}
             onAddDevice={props.onAddDevice}
             onAddSideChat={props.onAddSideChat}
+            onAddBoard={props.onAddBoard}
             browserAvailable={props.browserAvailable}
             terminalAvailable={props.terminalAvailable}
             diffAvailable={props.diffAvailable}

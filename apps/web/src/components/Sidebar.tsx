@@ -26,6 +26,7 @@ import {
   moveThreadBatches,
   runThreadFolderMenuAction,
 } from "../hooks/threadFolderMenu";
+import { buildBoardMenuItem, isBoardMenuId, runBoardMenuAction } from "../hooks/boardMenu";
 import {
   SidebarThreadFolderHeader,
   SidebarThreadFolderEmptyRow,
@@ -297,7 +298,11 @@ import {
   useComboboxFilter,
 } from "./ui/combobox";
 import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
-import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
+import {
+  SidebarBoardLink,
+  SidebarChromeFooter,
+  SidebarChromeHeader,
+} from "./sidebar/SidebarChrome";
 import { SidebarHeaderIconButton, SidebarThreadHeader } from "./sidebar/SidebarThreadHeader";
 import { TooltipProvider } from "./ui/tooltip";
 import {
@@ -3565,6 +3570,14 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                   AuthOrchestrationOperateScope,
                 ),
               }),
+              boardMenu: buildBoardMenuItem({
+                environmentId: thread.environmentId,
+                threadId: thread.id,
+                canOperate: readEnvironmentScope(
+                  thread.environmentId,
+                  AuthOrchestrationOperateScope,
+                ),
+              }),
               branch: thread.branch ?? null,
               // An archived project is not a filter choice.
               projectFilter:
@@ -3605,6 +3618,17 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
           runThreadFolderMenuAction(clicked.value, {
             environmentId: thread.environmentId,
             threadIds: [thread.id],
+          });
+          return;
+        }
+        if (isBoardMenuId(clicked.value)) {
+          runBoardMenuAction(clicked.value, {
+            environmentId: thread.environmentId,
+            threadId: thread.id,
+            canOperate: true,
+            title: thread.title,
+            projectId: thread.projectId,
+            working: isThreadWorking(thread),
           });
           return;
         }
@@ -4140,6 +4164,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
               activeSearchResultIndex={activeSearchResultIndex}
               onClearSearch={clearThreadSearch}
             />
+            <SidebarBoardLink />
           </SidebarGroup>
         }
       >

@@ -46,6 +46,7 @@ import {
 } from "./threadDetailsPanelStyles";
 import { Menu, MenuPopup } from "../ui/menu";
 import {
+  ThreadBoardSection,
   ThreadProgressSection,
   ThreadRelatedFilesSection,
   ThreadSideTasksSection,
@@ -192,6 +193,8 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
         return (
           <>
             <div className="group/details-items">
+              {overview ? <ThreadBoardSection threadRef={activeThreadRef} /> : null}
+
               {overview && visible.progress ? (
                 <ThreadProgressSection threadRef={activeThreadRef} />
               ) : null}

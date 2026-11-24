@@ -18,6 +18,7 @@ import * as AgentSessionScanner from "../project/AgentSessionScanner.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as ThreadFolderService from "../threadFolders/ThreadFolderService.ts";
 import * as ThreadSideTaskService from "../threadSideTasks/ThreadSideTaskService.ts";
+import * as BoardService from "../board/BoardService.ts";
 import * as ProjectSetupScriptRunner from "../project/ProjectSetupScriptRunner.ts";
 import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
 import * as ScratchThreadPromotion from "../project/ScratchThreadPromotion.ts";
@@ -418,6 +419,7 @@ export const layerProduction = Layer.mergeAll(
   ThreadSideTaskService.layer.pipe(
     Layer.provide(Layer.mergeAll(ProjectionStore.layer, layerThreadLaunchProvided)),
   ),
+  BoardService.layer.pipe(Layer.provide(ProjectionStore.layer)),
   GuestShareService.layer.pipe(
     Layer.provide(Layer.merge(layerOrchestratorProvided, layerCommandOutputHubProvided)),
   ),

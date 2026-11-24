@@ -109,6 +109,11 @@ vi.mock("./threadFolderMenu", () => ({
   isThreadFolderMenuId: () => false,
   runThreadFolderMenuAction: vi.fn(),
 }));
+vi.mock("./boardMenu", () => ({
+  buildBoardMenuItem: () => null,
+  isBoardMenuId: () => false,
+  runBoardMenuAction: vi.fn(),
+}));
 vi.mock("./useCopyToClipboard", () => ({
   useCopyToClipboard: () => ({ copyToClipboard: () => recordEffect("copy") }),
 }));

@@ -1,4 +1,6 @@
 import { m } from "../i18n/messages";
+import { useBoardSupported } from "../state/board";
+import { useBoardPanelFollow } from "./board/useBoardPanelFollow";
 import { displayThreadTitle } from "../lib/threadTitle";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { useGT, useMessages } from "gt-react";
@@ -1050,6 +1052,8 @@ export default function ChatView(props: ChatViewProps) {
   })();
   const activeThreadRef = useActiveThreadRef(activeThread);
   const activeThreadKey = activeThreadRef ? scopedThreadKey(activeThreadRef) : null;
+  const boardSupported = useBoardSupported();
+  useBoardPanelFollow(isServerThread && boardSupported ? activeThreadRef : null);
   const activeEnvironmentServerBrowser = useEnvironmentSupportsServerBrowser(
     activeThreadRef?.environmentId ?? null,
   );
@@ -4098,6 +4102,11 @@ export default function ChatView(props: ChatViewProps) {
           onAddPullRequests={addPullRequestsSurfaceStable}
           onAddDevice={addDeviceSurfaceStable}
           onAddSideChat={sideChatsOffered ? openSideChatStable : undefined}
+          onAddBoard={
+            boardSupported && activeThreadRef !== null
+              ? () => useRightPanelStore.getState().open(activeThreadRef, "board")
+              : undefined
+          }
           browserAvailable={canOperatePreview && browserAvailable}
           terminalAvailable={activeProject !== null && canOperateTerminal}
           diffAvailable={isServerThread && isGitRepo}

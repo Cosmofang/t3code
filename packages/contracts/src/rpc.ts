@@ -451,6 +451,13 @@ import {
   ThreadSideTaskMutation,
   ThreadSideTaskMutationResult,
 } from "./threadSideTask.ts";
+import {
+  BoardError,
+  BoardListInput,
+  BoardListResult,
+  BoardMutation,
+  BoardMutationResult,
+} from "./board.ts";
 
 export const WS_METHODS = {
   projectsListEntries: "projects.listEntries",
@@ -595,6 +602,9 @@ export const WS_METHODS = {
 
   threadSideTasksSubscribe: "threadSideTasks.subscribe",
   threadSideTasksMutate: "threadSideTasks.mutate",
+
+  boardSubscribe: "board.subscribe",
+  boardMutate: "board.mutate",
 
   scheduledTasksSubscribe: "scheduledTasks.subscribe",
   scheduledTasksUpsert: "scheduledTasks.upsert",
@@ -2203,6 +2213,19 @@ const WsThreadSideTasksMutateRpc = Rpc.make(WS_METHODS.threadSideTasksMutate, {
   error: Schema.Union([ThreadSideTaskError, EnvironmentAuthorizationError]),
 });
 
+const WsBoardSubscribeRpc = Rpc.make(WS_METHODS.boardSubscribe, {
+  payload: BoardListInput,
+  success: BoardListResult,
+  error: Schema.Union([BoardError, EnvironmentAuthorizationError]),
+  stream: true,
+});
+
+const WsBoardMutateRpc = Rpc.make(WS_METHODS.boardMutate, {
+  payload: BoardMutation,
+  success: BoardMutationResult,
+  error: Schema.Union([BoardError, EnvironmentAuthorizationError]),
+});
+
 const WsScheduledTasksSubscribeRpc = Rpc.make(WS_METHODS.scheduledTasksSubscribe, {
   payload: ScheduledTaskListInput,
   success: ScheduledTaskListResult,
@@ -2370,6 +2393,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsThreadFoldersMutateRpc,
   WsThreadSideTasksSubscribeRpc,
   WsThreadSideTasksMutateRpc,
+  WsBoardSubscribeRpc,
+  WsBoardMutateRpc,
   WsScheduledTasksSubscribeRpc,
   WsScheduledTasksUpsertRpc,
   WsScheduledTasksSetEnabledRpc,

@@ -261,6 +261,7 @@ export const make = Effect.gen(function* () {
       threadActiveReorder: true,
       threadFolders: true,
       threadSideTasks: true,
+      board: true,
       threadAutoSettleOptOut: true,
       threadProjectFromScratch: true,
       threadTitleRegeneration: true,

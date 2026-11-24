@@ -8,6 +8,7 @@ import {
   type ThreadFolderMutation,
   ThreadSideTaskId,
   ThreadId,
+  BoardCardId,
   type OrchestrationV2ThreadProjection,
   type RunId,
   OrchestratorMcpFailure,
@@ -32,6 +33,7 @@ import * as ThreadSearch from "../../../orchestration-v2/ThreadSearch.ts";
 import * as ScheduledTasks from "../../../scheduledTasks/ScheduledTaskService.ts";
 import * as ThreadFolders from "../../../threadFolders/ThreadFolderService.ts";
 import * as ThreadSideTasks from "../../../threadSideTasks/ThreadSideTaskService.ts";
+import * as Board from "../../../board/BoardService.ts";
 import { queuedRunsInDeliveryOrder } from "../../../orchestration-v2/QueuedRunOrder.ts";
 import { ThreadToolkit } from "./tools.ts";
 
@@ -529,6 +531,46 @@ export const layer = McpToolAccess.toLayer(ThreadToolkit, {
             ),
           );
         return { taskId: task.id, pending };
+      }),
+  ),
+  // The card is the user's; the thread is only its source, so it writes the calling thread alone.
+  board_add_card: McpToolAccess.writesThreads(
+    () => [undefined],
+    (input) =>
+      Effect.gen(function* () {
+        const scope = yield* McpInvocationContext.McpInvocationContext;
+        if (scope.thread === undefined) {
+          return yield* new OrchestratorMcpFailure({
+            code: "invalid_request",
+            message:
+              "board_add_card works inside a thread: the card goes in that thread's project.",
+          });
+        }
+        const { projection } = yield* readThread(scope.thread.threadId);
+        const board = yield* Board.BoardService;
+        const random = yield* SecureRandom.SecureRandom;
+        const cardId = BoardCardId.make(`card:${yield* random.uuidV4()}`);
+        const boardFailure = (error: { readonly message: string }) =>
+          new OrchestratorMcpFailure({ code: "orchestration_error", message: error.message });
+        // The thread's first card links it by default; later ones leave it on that first card.
+        const attach =
+          input.attach ??
+          (yield* board
+            .cardForThread(scope.thread.threadId)
+            .pipe(Effect.mapError(boardFailure))) === null;
+        yield* board
+          .mutate({
+            type: "card.create",
+            cardId,
+            title: input.title,
+            ...(input.details === undefined ? {} : { details: input.details }),
+            ...(input.dueDate === undefined ? {} : { dueDate: input.dueDate }),
+            ...(input.column === undefined ? {} : { column: input.column }),
+            projectId: projection.thread.projectId,
+            ...(attach ? { threadIds: [scope.thread.threadId] } : {}),
+          })
+          .pipe(Effect.mapError(boardFailure));
+        return { cardId, attached: attach };
       }),
   ),
   t3_thread_organize: writesThread((input) =>

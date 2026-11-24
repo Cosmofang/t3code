@@ -153,6 +153,12 @@ const ICON_PATHS: Record<string, ReadonlyArray<{ tag: string; attrs: Record<stri
     { tag: "path", attrs: { d: "M3 5a2 2 0 0 0 2 2h3" } },
     { tag: "path", attrs: { d: "M3 3v13a2 2 0 0 0 2 2h3" } },
   ],
+  kanban: [
+    { tag: "rect", attrs: { width: "18", height: "18", x: "3", y: "3", rx: "2" } },
+    { tag: "path", attrs: { d: "M8 7v7" } },
+    { tag: "path", attrs: { d: "M12 7v4" } },
+    { tag: "path", attrs: { d: "M16 7v9" } },
+  ],
   "text-search": [
     { tag: "path", attrs: { d: "M21 5H3" } },
     { tag: "path", attrs: { d: "M10 12H3" } },

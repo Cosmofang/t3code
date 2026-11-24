@@ -1,4 +1,5 @@
 import type {
+  BoardColumn,
   OrchestrationV2PlanStep,
   ScopedThreadRef,
   ThreadId,
@@ -13,6 +14,7 @@ import {
   CircleIcon,
   FileTextIcon,
   LoaderCircleIcon,
+  SquareKanbanIcon,
 } from "lucide-react";
 import * as Schema from "effect/Schema";
 import { type ReactNode, useState } from "react";
@@ -27,8 +29,12 @@ import {
   useThreadCheckpointSummaries,
 } from "../../state/entities";
 import { mutateThreadSideTasks, useThreadSideTasks } from "../../state/threadSideTasks";
+import { mutateBoard, useBoard } from "../../state/board";
+import { BOARD_COLUMN_ORDER } from "../board/board.logic";
+import { useBoardUiStore } from "../board/boardUiStore";
+import { BOARD_COLUMN_DOT, useBoardColumnLabels } from "../board/useBoardColumnLabels";
 import { Button } from "../ui/button";
-import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
+import { Menu, MenuItem, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "../ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { ThreadDetailsControl } from "./ThreadDetailsControl";
 import { ThreadDetailsSection } from "./ThreadDetailsSection";
@@ -81,6 +87,83 @@ function SectionFoldButton({
         className={cn("size-3.5 transition-transform", collapsed && "-rotate-90")}
       />
     </button>
+  );
+}
+
+/** The board card this thread sits on; a click opens it on the board beside the chat. */
+export function ThreadBoardSection({ threadRef }: { readonly threadRef: ScopedThreadRef }) {
+  const gt = useGT();
+  const board = useBoard();
+  const columnLabels = useBoardColumnLabels();
+  const card = board.cards.find(
+    (entry) =>
+      entry.environmentId === threadRef.environmentId &&
+      entry.archivedAt === null &&
+      entry.threadIds.includes(threadRef.threadId),
+  );
+  if (card === undefined) return null;
+  const title = gt("Board", { $context: "thread details section showing the thread's board card" });
+  return (
+    <ThreadDetailsSection
+      headingId="thread-details-board-heading"
+      title={title}
+      actions={
+        <Menu>
+          <MenuTrigger
+            render={
+              <ThreadDetailsControl
+                size="xs"
+                variant="ghost"
+                part="meta"
+                aria-label={gt("Move card to another column")}
+              />
+            }
+          >
+            <span
+              aria-hidden
+              className={cn("size-1.5 rounded-full", BOARD_COLUMN_DOT[card.column])}
+            />
+            {columnLabels[card.column]}
+            <ChevronDownIcon aria-hidden className="size-3" />
+          </MenuTrigger>
+          <MenuPopup align="end">
+            <MenuRadioGroup
+              value={card.column}
+              onValueChange={(next) =>
+                void mutateBoard(
+                  card.environmentId,
+                  { type: "card.move", cardId: card.id, column: next as BoardColumn },
+                  gt("Could not move the card"),
+                )
+              }
+            >
+              {BOARD_COLUMN_ORDER.map((column) => (
+                <MenuRadioItem key={column} value={column}>
+                  {columnLabels[column]}
+                </MenuRadioItem>
+              ))}
+            </MenuRadioGroup>
+          </MenuPopup>
+        </Menu>
+      }
+    >
+      <ThreadDetailsControl
+        size="sm"
+        variant="ghost"
+        part="row"
+        onClick={() => {
+          useBoardUiStore
+            .getState()
+            .openCardDetail({ environmentId: card.environmentId, cardId: card.id });
+          useRightPanelStore.getState().open(threadRef, "board");
+        }}
+      >
+        <SquareKanbanIcon aria-hidden className={THREAD_DETAILS_PANEL_ICON_CLASS} />
+        <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground/80">
+          {card.title}
+        </span>
+      </ThreadDetailsControl>
+    </ThreadDetailsSection>
   );
 }
 

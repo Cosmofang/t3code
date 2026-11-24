@@ -139,6 +139,8 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   threadFolders: Schema.optionalKey(Schema.Boolean),
   /** Side tasks agents suggest, over `threadSideTasks.*` RPCs. */
   threadSideTasks: Schema.optionalKey(Schema.Boolean),
+  /** The board of notes and agent work, over `board.*` RPCs. */
+  board: Schema.optionalKey(Schema.Boolean),
   threadAutoSettleOptOut: Schema.optionalKey(Schema.Boolean),
   threadProjectFromScratch: Schema.optionalKey(Schema.Boolean),
   threadTitleRegeneration: Schema.optionalKey(Schema.Boolean),

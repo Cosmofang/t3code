@@ -30,6 +30,11 @@ import {
   ThreadSideTaskReason,
   ThreadSideTaskTitle,
   clampedPositiveInt,
+  BoardCardId,
+  BoardCardDetails,
+  BoardCardTitle,
+  BoardColumn,
+  BoardDueDate,
 } from "@t3tools/contracts";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Schema from "effect/Schema";
@@ -39,6 +44,7 @@ import * as ThreadSearch from "../../../orchestration-v2/ThreadSearch.ts";
 import * as ScheduledTaskService from "../../../scheduledTasks/ScheduledTaskService.ts";
 import * as ThreadFolderService from "../../../threadFolders/ThreadFolderService.ts";
 import * as ThreadSideTaskService from "../../../threadSideTasks/ThreadSideTaskService.ts";
+import * as BoardService from "../../../board/BoardService.ts";
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 
@@ -305,6 +311,26 @@ const SuggestTaskTool = Tool.make("suggest_task", {
   .annotate(Tool.Title, "Suggest a side task")
   .annotate(Tool.Destructive, false);
 
+const BoardAddCardTool = Tool.make("board_add_card", {
+  description:
+    'Put a card on the user\'s board, their list of notes and work to track ("add to the board", "记到看板"). Only when the user asks. The card goes in this thread\'s project. The thread\'s first card links this thread by default, so the card follows its progress; `attach: false` skips that, `attach: true` moves the thread onto the new card.',
+  parameters: Schema.Struct({
+    title: BoardCardTitle,
+    /** Markdown; `- [ ]` lines become a checklist. */
+    details: Schema.optional(BoardCardDetails),
+    /** YYYY-MM-DD in the user's time zone. */
+    dueDate: Schema.optional(BoardDueDate),
+    column: Schema.optional(BoardColumn),
+    attach: Schema.optional(Schema.Boolean),
+  }),
+  success: Schema.Struct({ cardId: BoardCardId, attached: Schema.Boolean }),
+  failure: OrchestratorMcpFailure,
+  failureMode: "return" as const,
+  dependencies: [...commandTool.dependencies, BoardService.BoardService],
+})
+  .annotate(Tool.Title, "Add a board card")
+  .annotate(Tool.Destructive, false);
+
 export const ThreadToolkit = Toolkit.make(
   ScheduledTaskRunTool,
   ThreadSearchTool,
@@ -313,6 +339,7 @@ export const ThreadToolkit = Toolkit.make(
   ThreadOrganizeTool,
   ThreadFolderTool,
   SuggestTaskTool,
+  BoardAddCardTool,
   PendingRequestTool,
   QueueTool,
 );

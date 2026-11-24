@@ -1,4 +1,10 @@
-import { ArrowLeftIcon, ArrowRightIcon, ChartNoAxesColumnIcon, SettingsIcon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  ChartNoAxesColumnIcon,
+  SettingsIcon,
+  SquareKanbanIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { T, useGT } from "gt-react";
 import { memo } from "react";
@@ -15,6 +21,7 @@ import {
 import { primaryServerKeybindingsAtom } from "../../state/server";
 import { cn } from "../../lib/utils";
 import { useIssuesSupported, usePullRequestsSupported } from "../../state/environments";
+import { useBoard, useBoardSupported } from "../../state/board";
 import { T3Wordmark } from "../T3Wordmark";
 import {
   resolveEnvironmentIdentificationPillLabel,
@@ -224,6 +231,48 @@ function SidebarUtilityItem({
     </SidebarMenuItem>
   );
 }
+
+/** The board's row under the thread search: a daily destination, so it gets a labeled row. */
+export const SidebarBoardLink = memo(function SidebarBoardLink() {
+  const gt = useGT();
+  const navigate = useNavigate();
+  const { isMobile, setOpenMobile } = useSidebar();
+  const isOnBoard = useLocation({ select: (location) => location.pathname === "/board" });
+  const boardSupported = useBoardSupported();
+  const board = useBoard();
+  if (!boardSupported) return null;
+  const reviewCount = board.cards.filter(
+    (card) => card.archivedAt === null && card.column === "review",
+  ).length;
+  const label = gt("Board", { $context: "sidebar link to the board of notes and work" });
+  return (
+    <SidebarMenu className="mt-px">
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          isActive={isOnBoard}
+          aria-label={
+            reviewCount > 0 ? gt("Board, {count} to review", { count: reviewCount }) : label
+          }
+          onClick={() => {
+            if (isMobile) setOpenMobile(false);
+            void navigate({ to: "/board" });
+          }}
+        >
+          <SquareKanbanIcon className="size-4 shrink-0 text-(--sidebar-icon-color)" />
+          <span className="min-w-0 flex-1 truncate">{label}</span>
+          {reviewCount > 0 ? (
+            <span
+              aria-hidden
+              className="flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-warning px-1 text-3xs leading-none font-semibold text-white tabular-nums"
+            >
+              {reviewCount > 99 ? "99+" : reviewCount}
+            </span>
+          ) : null}
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    </SidebarMenu>
+  );
+});
 
 const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   const navigate = useNavigate();

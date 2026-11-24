@@ -127,6 +127,7 @@ import * as DocumentText from "./provider/DocumentText.ts";
 import * as ScheduledTasks from "./scheduledTasks/ScheduledTaskService.ts";
 import * as ThreadFolders from "./threadFolders/ThreadFolderService.ts";
 import * as ThreadSideTasks from "./threadSideTasks/ThreadSideTaskService.ts";
+import * as Board from "./board/BoardService.ts";
 import * as SecretRequests from "./secrets/SecretRequests.ts";
 import * as GuestShareService from "./guest/GuestShareService.ts";
 import {
@@ -1484,6 +1485,7 @@ export const layerWsRpc = (
       const scheduledTasks = yield* ScheduledTasks.ScheduledTaskService;
       const threadFolders = yield* ThreadFolders.ThreadFolderService;
       const threadSideTasks = yield* ThreadSideTasks.ThreadSideTaskService;
+      const board = yield* Board.BoardService;
       const secretRequests = yield* SecretRequests.SecretRequests;
       const guestShares = yield* GuestShareService.GuestShareService;
       const pullRequests = yield* PullRequestService.PullRequestService;
@@ -2330,6 +2332,8 @@ export const layerWsRpc = (
         [WS_METHODS.threadFoldersMutate]: (input) => threadFolders.mutate(input),
         [WS_METHODS.threadSideTasksSubscribe]: (_input) => threadSideTasks.subscribeList(),
         [WS_METHODS.threadSideTasksMutate]: (input) => threadSideTasks.mutate(input),
+        [WS_METHODS.boardSubscribe]: (_input) => board.subscribeList(),
+        [WS_METHODS.boardMutate]: (input) => board.mutate(input),
         [ORCHESTRATION_V2_WS_METHODS.subscribePromptSuggestion]: (input) =>
           providerSessionManager.subscribePromptSuggestion(input.threadId),
         [WS_METHODS.scheduledTasksSubscribe]: (_input) =>

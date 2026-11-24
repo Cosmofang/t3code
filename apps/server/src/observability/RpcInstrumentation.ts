@@ -101,6 +101,8 @@ const RPC_AGGREGATES = {
   [WS_METHODS.threadFoldersMutate]: "threadFolders",
   [WS_METHODS.threadSideTasksSubscribe]: "threadSideTasks",
   [WS_METHODS.threadSideTasksMutate]: "threadSideTasks",
+  [WS_METHODS.boardSubscribe]: "board",
+  [WS_METHODS.boardMutate]: "board",
   [WS_METHODS.scheduledTasksSubscribe]: "scheduledTasks",
   [WS_METHODS.scheduledTasksUpsert]: "scheduledTasks",
   [WS_METHODS.scheduledTasksSetEnabled]: "scheduledTasks",

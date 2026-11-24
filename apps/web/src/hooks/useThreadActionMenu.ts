@@ -53,6 +53,8 @@ import {
   isThreadFolderMenuId,
   runThreadFolderMenuAction,
 } from "./threadFolderMenu";
+import { buildBoardMenuItem, isBoardMenuId, runBoardMenuAction } from "./boardMenu";
+import { isThreadWorking } from "@t3tools/client-runtime/state/thread-inbox";
 import { useNewThreadHandler } from "./useHandleNewThread";
 import { useClientSettings } from "./useSettings";
 import { canTurnThreadIntoProject, useThreadActions } from "./useThreadActions";
@@ -167,6 +169,11 @@ export function useThreadActionMenu(input: {
           threadIds: [threadRef.threadId],
           canOperate,
         }),
+        boardMenu: buildBoardMenuItem({
+          environmentId: threadRef.environmentId,
+          threadId: threadRef.threadId,
+          canOperate,
+        }),
         canTurnIntoProject: canTurnThreadIntoProject(threadRef),
       });
       const clicked = await settlePromise(() => api.contextMenu.show(items, position));
@@ -186,6 +193,17 @@ export function useThreadActionMenu(input: {
         runThreadFolderMenuAction(action, {
           environmentId: threadRef.environmentId,
           threadIds: [threadRef.threadId],
+        });
+        return;
+      }
+      if (isBoardMenuId(action)) {
+        runBoardMenuAction(action, {
+          environmentId: threadRef.environmentId,
+          threadId: threadRef.threadId,
+          canOperate,
+          title: thread.title,
+          projectId: thread.projectId,
+          working: isThreadWorking(thread),
         });
         return;
       }

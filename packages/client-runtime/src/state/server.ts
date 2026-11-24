@@ -1582,6 +1582,10 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:server:thread-side-tasks:live",
       tag: WS_METHODS.threadSideTasksSubscribe,
     }),
+    boardLive: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+      label: "environment-data:server:board:live",
+      tag: WS_METHODS.boardSubscribe,
+    }),
     scheduledTasksLive: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
       label: "environment-data:server:scheduled-tasks:live",
       tag: WS_METHODS.scheduledTasksSubscribe,
@@ -1856,6 +1860,11 @@ export function createServerEnvironmentAtoms<R, E>(
     mutateThreadSideTasks: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:thread-side-tasks:mutate",
       tag: WS_METHODS.threadSideTasksMutate,
+      concurrency: configConcurrency,
+    }),
+    mutateBoard: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:board:mutate",
+      tag: WS_METHODS.boardMutate,
       concurrency: configConcurrency,
     }),
     upsertScheduledTask: createEnvironmentRpcCommand(runtime, {

@@ -36,6 +36,7 @@ import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import * as ScheduledTaskService from "../scheduledTasks/ScheduledTaskService.ts";
 import * as ThreadFolderService from "../threadFolders/ThreadFolderService.ts";
 import * as ThreadSideTaskService from "../threadSideTasks/ThreadSideTaskService.ts";
+import * as BoardServiceModule from "../board/BoardService.ts";
 import * as SecretRequests from "../secrets/SecretRequests.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as RemoteDelegation from "./RemoteDelegation.ts";
@@ -250,6 +251,7 @@ const serveBox = (seen: Ref.Ref<Seen>, linkSession: Ref.Ref<string>) =>
           Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
           Layer.mock(ThreadFolderService.ThreadFolderService)({}),
           Layer.mock(ThreadSideTaskService.ThreadSideTaskService)({}),
+          Layer.mock(BoardServiceModule.BoardService)({}),
         ),
       ),
       Layer.provide(Layer.mock(ProjectCloneTracker.ProjectCloneTracker)({})),
@@ -334,6 +336,7 @@ const makeLaptop = Effect.gen(function* () {
         Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
         Layer.mock(ThreadFolderService.ThreadFolderService)({}),
         Layer.mock(ThreadSideTaskService.ThreadSideTaskService)({}),
+        Layer.mock(BoardServiceModule.BoardService)({}),
         Layer.mock(ProjectService.ProjectService)({}),
         Layer.mock(ProjectCloneTracker.ProjectCloneTracker)({}),
         Layer.mock(SecretRequests.SecretRequests)({}),

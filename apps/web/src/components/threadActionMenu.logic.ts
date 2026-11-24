@@ -5,6 +5,7 @@ import { msg } from "gt-react";
 import { m, type MessageResolver } from "../i18n/messages";
 
 import type { ThreadFolderMenuId } from "../hooks/threadFolderMenu";
+import type { BoardMenuId } from "../hooks/boardMenu";
 
 export type ThreadActionMenuId =
   | "find"
@@ -33,7 +34,8 @@ export type ThreadActionMenuId =
   | "copy-thread-id"
   | "archive"
   | "delete"
-  | ThreadFolderMenuId;
+  | ThreadFolderMenuId
+  | BoardMenuId;
 
 export type DraftActionMenuId =
   | "copy"
@@ -123,6 +125,7 @@ export interface ThreadActionMenuState {
   /** Guest links need their own grant, so the caller checks it instead of `canOperate`. */
   readonly canShareWithGuest?: boolean;
   readonly folderMenu?: ContextMenuItem<ThreadFolderMenuId> | null;
+  readonly boardMenu?: ContextMenuItem<BoardMenuId> | null;
   /** A No project thread with its own folder, on a server that can promote it. */
   readonly canTurnIntoProject?: boolean;
 }
@@ -203,6 +206,7 @@ export function buildThreadActionMenuItems(
         ]
       : []),
     ...(state.folderMenu ? [state.folderMenu] : []),
+    ...(state.boardMenu ? [state.boardMenu] : []),
     { id: "rename", label: resolve(msg("Rename thread")), icon: "pencil", separatorBefore: true },
     ...(state.supports.titleRegeneration
       ? [
