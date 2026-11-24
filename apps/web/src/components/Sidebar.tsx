@@ -19,6 +19,7 @@ import {
   readEnvironmentSupportsThreadFolders,
   requestThreadFolderRename,
 } from "../state/threadFolders";
+import { findThreadFolderProject } from "../state/threadFolderLaunch";
 import {
   buildMoveToFolderMenuItem,
   buildMultiSelectFolderMenuItems,
@@ -1420,6 +1421,32 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const startThreadInProjectFolder = useStableCallback((group: SidebarProjectSnapshot) => {
     if (isMobile) setOpenMobile(false);
     void handleNewThread(scopeProjectRef(group.environmentId, group.id));
+  });
+  // A folder's directory must already be a project; the person adds it, so nothing is created here.
+  const startThreadInThreadFolder = useStableCallback((folder: EnvironmentThreadFolder) => {
+    if (folder.workspaceRoot === null) return;
+    const project = findThreadFolderProject(folder);
+    if (project === null) {
+      toastManager.add(
+        stackedThreadToast({
+          type: "warning",
+          title: gt("Add this directory as a project first"),
+          description: gt(
+            "{directory} is not a project yet. Add it, then start the thread from the folder again.",
+            { directory: folder.workspaceRoot },
+          ),
+          actionProps: {
+            children: gt("Add project"),
+            onClick: () => openAddProjectCommandPalette(),
+          },
+        }),
+      );
+      return;
+    }
+    if (isMobile) setOpenMobile(false);
+    void handleNewThread(scopeProjectRef(project.environmentId, project.id), {
+      threadFolder: { environmentId: folder.environmentId, folderId: folder.id },
+    });
   });
   const handleProjectFolderContextMenu = useStableCallback(
     (
@@ -2946,6 +2973,16 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       const clicked = await settlePromise(() =>
         api.contextMenu.show(
           [
+            ...(folder.workspaceRoot === null
+              ? []
+              : [
+                  {
+                    id: "new-thread",
+                    label: gt("New thread here", { $context: "start a thread in a folder" }),
+                    icon: "message-square-plus",
+                    disabled: !canOperate,
+                  },
+                ]),
             folder.pinnedAt != null
               ? { id: "unpin", label: gt("Unpin folder"), icon: "pin-off", disabled: !canOperate }
               : { id: "pin", label: gt("Pin folder"), icon: "pin", disabled: !canOperate },
@@ -3131,6 +3168,9 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         return;
       }
       switch (clicked.value) {
+        case "new-thread":
+          startThreadInThreadFolder(folder);
+          return;
         case "pin":
         case "unpin":
           void mutateThreadFolders(
@@ -4571,6 +4611,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                               onToggle={handleToggleThreadFolder}
                               onRename={handleThreadFolderRename}
                               onContextMenu={handleThreadFolderContextMenu}
+                              onNewThread={startThreadInThreadFolder}
                             />,
                           );
                           const memberTint = threadFolderMemberClassName(
