@@ -172,6 +172,7 @@ import {
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { useOrderWhileOpen } from "../hooks/useOrderWhileOpen";
 import { useProjectPin } from "../hooks/useProjectGroupUpdate";
+import { useRemoveProjectMembers } from "../hooks/useRemoveProjectMembers";
 import { useSidebarProjectGroups } from "../hooks/useSidebarProjectGroups";
 import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
 import { registerSettleAndAdvance } from "../settleAndAdvance";
@@ -1415,6 +1416,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       openProjectSettings(projectGroup);
     },
   );
+  const removeProjectMembers = useRemoveProjectMembers();
   const startThreadInProjectFolder = useStableCallback((group: SidebarProjectSnapshot) => {
     if (isMobile) setOpenMobile(false);
     void handleNewThread(scopeProjectRef(group.environmentId, group.id));
@@ -1441,6 +1443,24 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                   ]
                 : []),
               { id: "project-settings", label: gt("Project settings"), icon: "settings" },
+              // The scratch project holds every "No project" thread, so it is never removed here.
+              ...(group.memberProjects.some((member) => member.isScratch)
+                ? []
+                : [
+                    {
+                      id: "remove-project",
+                      label:
+                        group.memberProjects.length > 1
+                          ? gt("Remove this project everywhere")
+                          : gt("Remove project"),
+                      icon: "trash",
+                      destructive: true,
+                      separatorBefore: true,
+                      disabled: !group.memberProjects.every((member) =>
+                        readEnvironmentScope(member.environmentId, AuthOrchestrationOperateScope),
+                      ),
+                    },
+                  ]),
             ],
             position,
             source,
@@ -1460,6 +1480,14 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             return;
           case "project-settings":
             openProjectSettings(group);
+            return;
+          case "remove-project":
+            void removeProjectMembers({
+              group,
+              members: group.memberProjects,
+              allMembers: group.memberProjects,
+              hasOtherMembers: false,
+            });
             return;
         }
       })();
