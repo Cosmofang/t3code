@@ -12327,5 +12327,9 @@
   "4b55655bb29074cd": "El entorno del hilo no tiene tablero.",
   "1df072b6acb2feef": "Abrir en vista dividida",
   "91f13ad9b788f8d5": "Cerrar vista dividida",
-  "255a537ab23ddd2d": "Este hilo ya no está disponible."
+  "255a537ab23ddd2d": "Este hilo ya no está disponible.",
+  "59b9cba556120d6f": "Vista dividida con un hilo nuevo",
+  "218bbdb2babfc1c0": "Cambiar tamaño de la vista dividida",
+  "62ce49f2099538d7": "Mostrar lado a lado",
+  "849e340389ee8502": "Este hilo nuevo aún no tiene mensajes."
 }

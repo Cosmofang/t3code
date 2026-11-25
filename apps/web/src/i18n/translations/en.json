@@ -12341,5 +12341,9 @@
   "4b55655bb29074cd": "The thread's environment has no board.",
   "1df072b6acb2feef": "Open in split view",
   "91f13ad9b788f8d5": "Close split view",
-  "255a537ab23ddd2d": "This thread is no longer available."
+  "255a537ab23ddd2d": "This thread is no longer available.",
+  "59b9cba556120d6f": "Split view with a new thread",
+  "218bbdb2babfc1c0": "Resize split view",
+  "62ce49f2099538d7": "Show side by side",
+  "849e340389ee8502": "This new thread has no messages yet."
 }
