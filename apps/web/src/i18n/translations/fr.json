@@ -12329,5 +12329,8 @@
   "64e783ba76927c58": "travaille dans {directory}",
   "a5ebf78d8e1ed574": "Nouveau fil dans {directory}",
   "6cf9a82379f77152": "Impossible d'ajouter le fil au tableau",
-  "4b55655bb29074cd": "L'environnement du fil n'a pas de tableau."
+  "4b55655bb29074cd": "L'environnement du fil n'a pas de tableau.",
+  "1df072b6acb2feef": "Ouvrir en vue fractionnée",
+  "91f13ad9b788f8d5": "Fermer la vue fractionnée",
+  "255a537ab23ddd2d": "Ce fil n’est plus disponible."
 }

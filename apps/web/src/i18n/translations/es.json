@@ -12324,5 +12324,8 @@
   "64e783ba76927c58": "trabaja en {directory}",
   "a5ebf78d8e1ed574": "Nuevo hilo en {directory}",
   "6cf9a82379f77152": "No se pudo añadir el hilo al tablero",
-  "4b55655bb29074cd": "El entorno del hilo no tiene tablero."
+  "4b55655bb29074cd": "El entorno del hilo no tiene tablero.",
+  "1df072b6acb2feef": "Abrir en vista dividida",
+  "91f13ad9b788f8d5": "Cerrar vista dividida",
+  "255a537ab23ddd2d": "Este hilo ya no está disponible."
 }

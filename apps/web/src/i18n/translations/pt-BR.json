@@ -12328,5 +12328,8 @@
   "64e783ba76927c58": "trabalha em {directory}",
   "a5ebf78d8e1ed574": "Novo thread em {directory}",
   "6cf9a82379f77152": "Não foi possível adicionar a conversa ao quadro",
-  "4b55655bb29074cd": "O ambiente da conversa não tem quadro."
+  "4b55655bb29074cd": "O ambiente da conversa não tem quadro.",
+  "1df072b6acb2feef": "Abrir em visualização dividida",
+  "91f13ad9b788f8d5": "Fechar visualização dividida",
+  "255a537ab23ddd2d": "Esta conversa não está mais disponível."
 }
