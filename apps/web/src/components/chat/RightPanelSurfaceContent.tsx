@@ -13,6 +13,7 @@ import type {
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { lazy, Suspense } from "react";
 import SideChatPane from "./SideChatPane";
+import SplitThreadPane from "./SplitThreadPane";
 import type { ComposerImageAttachment, DraftId } from "../../composerDraftStore";
 import type { ShortcutMatchContext } from "../../keybindings";
 import type { SideChatParentPanel } from "../../lib/sideChatPane";
@@ -223,6 +224,17 @@ export function RightPanelSurfaceContent(props: {
           parentRef={threadRef}
           threadId={surface.threadId}
           parentPanel={props.sideChatParentPanel}
+          onClose={() => onCloseSurface(surface)}
+        />
+      );
+    case "thread":
+      // Not lazy, for the same reason as a side chat.
+      return (
+        <SplitThreadPane
+          key={surface.id}
+          hostRef={threadRef}
+          threadId={surface.threadId}
+          hostPanel={props.sideChatParentPanel}
           onClose={() => onCloseSurface(surface)}
         />
       );

@@ -12259,5 +12259,8 @@
   "56c5051c45450b9b": "Board",
   "d15d08c2e102e31b": "Move card to another column",
   "12ce0c8f2639c5d9": "Board, {count} to review",
-  "d770c0e52cbb52df": "Board"
+  "d770c0e52cbb52df": "Board",
+  "1df072b6acb2feef": "분할 보기로 열기",
+  "91f13ad9b788f8d5": "분할 보기 닫기",
+  "255a537ab23ddd2d": "이 스레드는 더 이상 사용할 수 없습니다."
 }

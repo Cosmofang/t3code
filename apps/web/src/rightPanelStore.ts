@@ -25,6 +25,7 @@ const RIGHT_PANEL_KINDS = [
   "pull-requests",
   "issue",
   "side-chat",
+  "thread",
   "board",
 ] as const;
 export type RightPanelKind = (typeof RIGHT_PANEL_KINDS)[number];
@@ -98,7 +99,9 @@ export type RightPanelSurface =
       key: string;
       url?: string;
     }
-  | { id: `side-chat:${string}`; kind: "side-chat"; threadId: ThreadId };
+  | { id: `side-chat:${string}`; kind: "side-chat"; threadId: ThreadId }
+  /** Another thread of the same environment, shown beside the panel's own thread. */
+  | { id: `thread:${string}`; kind: "thread"; threadId: ThreadId };
 
 const RIGHT_PANEL_STORAGE_KEY = "t3code:right-panel-state:v2";
 const RIGHT_PANEL_STORAGE_VERSION = 15;
@@ -156,9 +159,14 @@ interface RightPanelStoreState {
   ) => boolean;
   open: (
     ref: ScopedThreadRef,
-    kind: Exclude<RightPanelKind, "file" | "terminal" | "pull-request" | "issue" | "side-chat">,
+    kind: Exclude<
+      RightPanelKind,
+      "file" | "terminal" | "pull-request" | "issue" | "side-chat" | "thread"
+    >,
   ) => void;
   openSideChat: (ref: ScopedThreadRef, threadId: ThreadId) => void;
+  /** Shows another thread beside `ref`'s. A thread is never shown beside itself. */
+  openThread: (ref: ScopedThreadRef, threadId: ThreadId) => void;
   openDevice: (ref: ScopedThreadRef, target: DeviceTabTarget, automatic?: boolean) => void;
   renameDevice: (ref: ScopedThreadRef, surfaceId: string, title: string) => void;
   openBrowser: (ref: ScopedThreadRef, tabId: string | null) => void;
@@ -223,7 +231,10 @@ interface RightPanelStoreState {
   toggleVisibility: (ref: ScopedThreadRef) => void;
   toggle: (
     ref: ScopedThreadRef,
-    kind: Exclude<RightPanelKind, "file" | "terminal" | "pull-request" | "issue" | "side-chat">,
+    kind: Exclude<
+      RightPanelKind,
+      "file" | "terminal" | "pull-request" | "issue" | "side-chat" | "thread"
+    >,
   ) => void;
   setThreadPanelOpen: (
     ref: ScopedThreadRef,
@@ -248,7 +259,7 @@ const DEFAULT_THREAD_PANEL_VISIBILITY: ThreadPanelVisibility = {
 const singletonSurface = (
   kind: Exclude<
     RightPanelKind,
-    "file" | "preview" | "terminal" | "pull-request" | "issue" | "side-chat"
+    "file" | "preview" | "terminal" | "pull-request" | "issue" | "side-chat" | "thread"
   >,
 ): RightPanelSurface => {
   switch (kind) {
@@ -826,6 +837,14 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             upsertSurface(current, { id: `side-chat:${threadId}`, kind: "side-chat", threadId }),
           ),
         ),
+      openThread: (ref, threadId) => {
+        if (ref.threadId === threadId) return;
+        set((state) =>
+          userAction(state, scopedThreadKey(ref), (current) =>
+            upsertSurface(current, { id: `thread:${threadId}`, kind: "thread", threadId }),
+          ),
+        );
+      },
       renameDevice: (ref, surfaceId, title) =>
         set((state) =>
           userAction(state, scopedThreadKey(ref), (current) => ({

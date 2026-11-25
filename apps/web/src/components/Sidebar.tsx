@@ -210,6 +210,7 @@ import {
   resolveActiveThreadRouteRef,
   resolveThreadRouteTarget,
 } from "../threadRoutes";
+import { useRightPanelStore } from "../rightPanelStore";
 import type { SidebarThreadSummary } from "../types";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
 import { cn } from "~/lib/utils";
@@ -3555,6 +3556,15 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                 projectRef.projectId === thread.projectId,
             ),
           ) ?? null;
+        // The split shows a saved thread beside another saved thread of the same environment.
+        const splitHostRef =
+          routeThreadRef !== null &&
+          routeThreadKey !== null &&
+          routeThreadKey !== threadKey &&
+          routeThreadRef.environmentId === thread.environmentId &&
+          threadByKeyRef.current.has(routeThreadKey)
+            ? routeThreadRef
+            : null;
         const clicked = await settlePromise(() =>
           api.contextMenu.show(
             buildThreadActionMenuItems({
@@ -3562,6 +3572,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                 threadRef.environmentId,
                 AuthOrchestrationOperateScope,
               ),
+              canOpenInSplit: splitHostRef !== null,
               folderMenu: buildMoveToFolderMenuItem({
                 environmentId: thread.environmentId,
                 threadIds: [thread.id],
@@ -3661,6 +3672,9 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                 environmentId: threadRef.environmentId,
                 projectId: thread.projectId,
               });
+            return;
+          case "open-in-split":
+            if (splitHostRef) useRightPanelStore.getState().openThread(splitHostRef, thread.id);
             return;
           case "new-thread-on-branch": {
             const result = await settlePromise(() =>

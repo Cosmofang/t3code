@@ -12315,5 +12315,8 @@
   "56c5051c45450b9b": "Board",
   "d15d08c2e102e31b": "Move card to another column",
   "12ce0c8f2639c5d9": "Board, {count} to review",
-  "d770c0e52cbb52df": "Board"
+  "d770c0e52cbb52df": "Board",
+  "1df072b6acb2feef": "Ouvrir en vue fractionnée",
+  "91f13ad9b788f8d5": "Fermer la vue fractionnée",
+  "255a537ab23ddd2d": "Ce fil n’est plus disponible."
 }
