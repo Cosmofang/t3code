@@ -12326,5 +12326,7 @@
   "75c3790daf0685c8": "Novos threads iniciados a partir desta pasta trabalham neste diretório.",
   "fd6ce8296f979d76": "Este diretório ainda não é um projeto. Adicione-o como projeto antes de iniciar threads a partir desta pasta.",
   "64e783ba76927c58": "trabalha em {directory}",
-  "a5ebf78d8e1ed574": "Novo thread em {directory}"
+  "a5ebf78d8e1ed574": "Novo thread em {directory}",
+  "6cf9a82379f77152": "Não foi possível adicionar a conversa ao quadro",
+  "4b55655bb29074cd": "O ambiente da conversa não tem quadro."
 }

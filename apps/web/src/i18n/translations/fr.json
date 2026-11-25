@@ -12327,5 +12327,7 @@
   "75c3790daf0685c8": "Les nouveaux fils lancés depuis ce dossier travaillent dans ce répertoire.",
   "fd6ce8296f979d76": "Ce répertoire n'est pas encore un projet. Ajoutez-le comme projet avant de lancer des fils depuis ce dossier.",
   "64e783ba76927c58": "travaille dans {directory}",
-  "a5ebf78d8e1ed574": "Nouveau fil dans {directory}"
+  "a5ebf78d8e1ed574": "Nouveau fil dans {directory}",
+  "6cf9a82379f77152": "Impossible d'ajouter le fil au tableau",
+  "4b55655bb29074cd": "L'environnement du fil n'a pas de tableau."
 }

@@ -12327,5 +12327,7 @@
   "75c3790daf0685c8": "Neue Threads aus diesem Ordner arbeiten in diesem Verzeichnis.",
   "fd6ce8296f979d76": "Dieses Verzeichnis ist noch kein Projekt. Füge es als Projekt hinzu, bevor du Threads aus diesem Ordner startest.",
   "64e783ba76927c58": "arbeitet in {directory}",
-  "a5ebf78d8e1ed574": "Neuer Thread in {directory}"
+  "a5ebf78d8e1ed574": "Neuer Thread in {directory}",
+  "6cf9a82379f77152": "Der Thread konnte nicht zum Board hinzugefügt werden",
+  "4b55655bb29074cd": "Die Umgebung des Threads hat kein Board."
 }

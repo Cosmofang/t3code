@@ -12336,5 +12336,7 @@
   "75c3790daf0685c8": "New threads started from this folder work in this directory.",
   "fd6ce8296f979d76": "This directory is not a project yet. Add it as a project before starting threads from this folder.",
   "64e783ba76927c58": "works in {directory}",
-  "a5ebf78d8e1ed574": "New thread in {directory}"
+  "a5ebf78d8e1ed574": "New thread in {directory}",
+  "6cf9a82379f77152": "Could not add the thread to the board",
+  "4b55655bb29074cd": "The thread's environment has no board."
 }

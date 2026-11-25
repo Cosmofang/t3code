@@ -12322,5 +12322,7 @@
   "75c3790daf0685c8": "Los nuevos hilos iniciados desde esta carpeta trabajan en este directorio.",
   "fd6ce8296f979d76": "Este directorio aún no es un proyecto. Añádelo como proyecto antes de iniciar hilos desde esta carpeta.",
   "64e783ba76927c58": "trabaja en {directory}",
-  "a5ebf78d8e1ed574": "Nuevo hilo en {directory}"
+  "a5ebf78d8e1ed574": "Nuevo hilo en {directory}",
+  "6cf9a82379f77152": "No se pudo añadir el hilo al tablero",
+  "4b55655bb29074cd": "El entorno del hilo no tiene tablero."
 }
