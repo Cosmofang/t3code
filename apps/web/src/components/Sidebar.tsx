@@ -210,7 +210,7 @@ import {
   resolveActiveThreadRouteRef,
   resolveThreadRouteTarget,
 } from "../threadRoutes";
-import { useRightPanelStore } from "../rightPanelStore";
+import { useSplitThreadStore } from "../splitThreadStore";
 import type { SidebarThreadSummary } from "../types";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
 import { cn } from "~/lib/utils";
@@ -3674,7 +3674,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
               });
             return;
           case "open-in-split":
-            if (splitHostRef) useRightPanelStore.getState().openThread(splitHostRef, thread.id);
+            if (splitHostRef) useSplitThreadStore.getState().open(splitHostRef, thread.id);
             return;
           case "new-thread-on-branch": {
             const result = await settlePromise(() =>
