@@ -16,7 +16,7 @@ export interface ReopenOwnerState {
   environmentKnown: boolean;
   catalogReady: boolean;
   ownerExists: boolean;
-  /** False only for a side chat or split thread tab whose thread is gone from the shell. */
+  /** False only for a side chat tab whose thread is gone from the shell. */
   sideChatExists: boolean;
   shellLive: boolean;
   panel: ThreadRightPanelState;
@@ -163,9 +163,6 @@ export async function reopenClosedView(
       break;
     case "side-chat":
       panels.openSideChat(ref, surface.threadId);
-      break;
-    case "thread":
-      panels.openThread(ref, surface.threadId);
       break;
     default:
       panels.open(ref, surface.kind);

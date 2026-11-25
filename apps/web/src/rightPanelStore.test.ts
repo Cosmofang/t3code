@@ -57,22 +57,6 @@ describe("rightPanelStore", () => {
     );
   });
 
-  it("opens another thread beside a thread, once, and never a thread beside itself", () => {
-    const panels = useRightPanelStore.getState();
-    panels.openThread(refA, refA.threadId);
-    expect(useRightPanelStore.getState().byThreadKey["env-1:thread-A"]).toBeUndefined();
-
-    panels.openThread(refA, refB.threadId);
-    panels.open(refA, "files");
-    panels.openThread(refA, refB.threadId);
-    const state = useRightPanelStore.getState().byThreadKey["env-1:thread-A"];
-    expect(state?.isOpen).toBe(true);
-    expect(state?.activeSurfaceId).toBe("thread:thread-B");
-    expect(state?.surfaces.filter((surface) => surface.kind === "thread")).toEqual([
-      { id: "thread:thread-B", kind: "thread", threadId: "thread-B" },
-    ]);
-  });
-
   it("records single and bulk tab closes, newest first", () => {
     const store = useRightPanelStore.getState();
     const pr = pullRequestSurface({

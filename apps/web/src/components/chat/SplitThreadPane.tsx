@@ -5,7 +5,9 @@ import { XIcon } from "lucide-react";
 import { useEffect } from "react";
 
 import { ComposerHandleContext } from "../../composerHandleContext";
+import { isElectron } from "../../env";
 import type { SideChatParentPanel } from "../../lib/sideChatPane";
+import { cn } from "../../lib/utils";
 import { hostRightPanel } from "../../rightPanelStore";
 import { useQuietThreadShell } from "../../state/entities";
 import { useEnvironmentShellHasSnapshot } from "../../state/shell";
@@ -14,8 +16,8 @@ import { Button } from "../ui/button";
 import { BackgroundThreadContext } from "./backgroundThread";
 
 /**
- * Another thread shown beside the main one: its title and Close over its own chat. Closing only
- * closes the tab; the thread stays in the sidebar.
+ * Another thread in a second column beside the main one, left of the right panel. Its panel
+ * actions open in the main thread's panel. Closing only closes the column.
  */
 export default function SplitThreadPane(props: {
   readonly hostRef: ScopedThreadRef;
@@ -35,12 +37,18 @@ export default function SplitThreadPane(props: {
   const snapshotLoaded = useEnvironmentShellHasSnapshot(hostRef.environmentId);
 
   return (
-    // The side chat marker keeps this pane's keys, scrolling and focus apart from the main thread's.
-    <div data-side-chat-pane={threadId} className="flex h-full min-h-0 flex-col">
-      <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border pr-1 pl-3">
-        <span className="min-w-0 flex-1 truncate text-xs font-medium">
-          {shell?.title ?? gt("Thread")}
-        </span>
+    // The side chat marker keeps this column's keys, scrolling and focus apart from the main thread's.
+    <div
+      data-side-chat-pane={threadId}
+      className="flex min-h-0 min-w-0 flex-1 flex-col border-l border-border bg-background"
+    >
+      {/* Close sits left: with the panel closed, the window's panel controls cover the right end. */}
+      <div
+        className={cn(
+          "flex h-[var(--workspace-topbar-height)] min-h-[var(--workspace-topbar-height)] shrink-0 items-center gap-1 border-b border-border pr-3 pl-1",
+          isElectron && "drag-region",
+        )}
+      >
         <Button
           variant="ghost"
           size="icon-xs"
@@ -49,6 +57,9 @@ export default function SplitThreadPane(props: {
         >
           <XIcon />
         </Button>
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">
+          {shell?.title ?? gt("Thread")}
+        </span>
       </div>
       {shell === null ? (
         snapshotLoaded ? (

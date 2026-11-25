@@ -633,8 +633,6 @@ function surfaceTitle(
       return surface.title ?? surface.target?.name ?? resolve(msg("Device"));
     case "side-chat":
       return resolve(msg("Side chat"));
-    case "thread":
-      return resolve(msg("Thread"));
     case "preview": {
       const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
       if (!snapshot || snapshot.navStatus._tag === "Idle") return resolve(msg("Browser"));
@@ -728,7 +726,6 @@ function SurfaceIcon({
     case "issue":
       return <IssueSurfaceIcon surface={surface} environmentId={environmentId} />;
     case "side-chat":
-    case "thread":
       return <SideChatTabIcon environmentId={environmentId} threadId={surface.threadId} />;
     case "device":
       return surface.target?.platform === "ios" ? (
@@ -985,7 +982,7 @@ function RightPanelTab(
     disabled: props.dragDisabled,
   });
   const sideChatShell = useQuietThreadShell(
-    (surface.kind === "side-chat" || surface.kind === "thread") && props.environmentId !== null
+    surface.kind === "side-chat" && props.environmentId !== null
       ? scopeThreadRef(props.environmentId, surface.threadId)
       : null,
   );

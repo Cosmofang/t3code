@@ -308,6 +308,8 @@ import { getTriggerDisplayModelName } from "./chat/providerIconUtils";
 import { resolveScrollToEndClearance } from "./composerFooterLayout";
 import { ChatHeader } from "./chat/ChatHeader";
 import { useSideChat } from "./chat/useSideChat";
+import SplitThreadPane from "./chat/SplitThreadPane";
+import { useSplitThreadStore } from "../splitThreadStore";
 import { useRemoteOpenState } from "~/remoteOpen";
 import { shouldShowOpenInPicker } from "./chat/OpenInPicker.logic";
 import { useOpenFavoriteEditorShortcut } from "./chat/OpenInPickerShortcut";
@@ -3282,6 +3284,16 @@ export default function ChatView(props: ChatViewProps) {
     openToolDiff: onOpenToolDiffStable,
     runShellCommand: runSideChatShellCommandStable,
   };
+  const storedSplitThreadId = useSplitThreadStore((state) =>
+    activeThreadKey === null ? undefined : state.byThreadKey[activeThreadKey],
+  );
+  // An embedded chat is already the second column; it never opens a third.
+  const splitThreadId =
+    embedded ||
+    storedSplitThreadId === undefined ||
+    storedSplitThreadId === activeThreadRef?.threadId
+      ? null
+      : storedSplitThreadId;
 
   if (!activeThread) {
     return embedded ? null : <NoActiveThreadState />;
@@ -4051,6 +4063,16 @@ export default function ChatView(props: ChatViewProps) {
           />
         )}
       </div>
+
+      {splitThreadId !== null && activeThreadRef && !rightPanelMaximized ? (
+        <SplitThreadPane
+          key={splitThreadId}
+          hostRef={activeThreadRef}
+          threadId={splitThreadId}
+          hostPanel={sideChatParentPanel}
+          onClose={() => useSplitThreadStore.getState().close(activeThreadRef)}
+        />
+      ) : null}
 
       {rightPanelPresent && activeThreadRef && !embedded ? (
         <ChatRightPanel
