@@ -12314,5 +12314,7 @@
   "56c5051c45450b9b": "Board",
   "d15d08c2e102e31b": "Move card to another column",
   "12ce0c8f2639c5d9": "Board, {count} to review",
-  "d770c0e52cbb52df": "Board"
+  "d770c0e52cbb52df": "Board",
+  "6cf9a82379f77152": "Не удалось добавить тред на доску",
+  "4b55655bb29074cd": "В окружении этого треда нет доски."
 }
