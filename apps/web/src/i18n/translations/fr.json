@@ -12318,5 +12318,9 @@
   "d770c0e52cbb52df": "Board",
   "1df072b6acb2feef": "Ouvrir en vue fractionnée",
   "91f13ad9b788f8d5": "Fermer la vue fractionnée",
-  "255a537ab23ddd2d": "Ce fil n’est plus disponible."
+  "255a537ab23ddd2d": "Ce fil n’est plus disponible.",
+  "59b9cba556120d6f": "Vue fractionnée avec un nouveau fil",
+  "218bbdb2babfc1c0": "Redimensionner la vue fractionnée",
+  "62ce49f2099538d7": "Afficher côte à côte",
+  "849e340389ee8502": "Ce nouveau fil n’a pas encore de messages."
 }
